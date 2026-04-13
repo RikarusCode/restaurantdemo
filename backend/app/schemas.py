@@ -1,4 +1,4 @@
-"""Pydantic models for the public API and streamed demo trace."""
+"""Pydantic models for the public API and streamed trace."""
 
 from typing import Any, Optional
 

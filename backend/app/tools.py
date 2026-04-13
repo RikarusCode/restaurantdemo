@@ -67,7 +67,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 SEARCH_TOOL_DEFINITION: dict[str, Any] = {
     "type": "function",
     "name": "search_restaurant",
-    "description": "Search the demo restaurant directory by name.",
+    "description": "Search the local restaurant directory by name, cuisine, or description.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -85,7 +85,7 @@ SEARCH_TOOL_DEFINITION: dict[str, Any] = {
 TOOL_DISPLAY_NAMES: dict[str, str] = {
     "call_restaurant_check_availability": "Calling Restaurant - Table Availability",
     "call_restaurant_check_hours": "Calling Restaurant - Hours Check",
-    "search_restaurant": "Searching for Restaurant",
+    "search_restaurant": "Resolving Restaurant",
 }
 
 
@@ -165,11 +165,15 @@ def _exec_search(args: dict[str, Any]) -> dict[str, Any]:
         "name": restaurant["name"],
         "phone": restaurant["phone"],
         "cuisine": restaurant["cuisine"],
+        "style": restaurant.get("style"),
+        "neighborhood": restaurant.get("neighborhood"),
         "address": restaurant["address"],
         "hours_today": f"{opens} to {closes}",
         "resolution": {
             "source": result["source"],
+            "resolver": result.get("resolver"),
             "confidence": result["confidence"],
+            "reason": result.get("reason"),
         },
     }
 
@@ -191,7 +195,7 @@ def _build_datetime(date_str: str | None, time_str: str | None) -> datetime | No
 def _restaurant_not_found() -> dict[str, Any]:
     return {
         "success": False,
-        "error": "Restaurant not found in the demo directory.",
+        "error": "Restaurant not found in the local directory.",
         "hint": "Select a restaurant or use Search mode with a restaurant name in the request.",
     }
 
@@ -206,6 +210,8 @@ def availability_sentence(restaurant_name: str, result: dict[str, Any]) -> str:
     if result.get("status") == "available":
         note = f" ({result['requested_slot_note']})" if result.get("requested_slot_note") else ""
         return f"{restaurant_name} has a table for {party_size} at {requested_time} {requested_date}{note}."
+    if result.get("status") == "party_too_large":
+        return f"{restaurant_name} cannot seat a party of {party_size}; {result.get('message', 'the party is too large')}."
     if result.get("alternative_time"):
         return (
             f"{restaurant_name} does not have a table at {requested_time}, "

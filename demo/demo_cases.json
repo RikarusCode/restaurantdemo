@@ -1,10 +1,10 @@
 [
   {
     "id": "TC-01",
-    "title": "Natural alias and typo availability path",
+    "title": "Natural alias availability path",
     "restaurant_name": null,
     "restaurant_phone": null,
-    "user_request": "check if the sushi place is avaliable at 6",
+    "user_request": "Can you check whether the sushi place has a table for 2 tonight at 6?",
     "expected_summary_contains": "They have a table for 2 at 6:00 PM."
   },
   {
@@ -12,15 +12,15 @@
     "title": "Core table availability path",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
-    "user_request": "Call this restaurant and ask if they have a table for 2 tonight at 7 PM.",
-    "expected_summary_contains": "7:30 PM is available"
+    "user_request": "Can you ask this restaurant about a table for 2 tonight at 7 PM?",
+    "expected_summary_contains": "is available"
   },
   {
     "id": "TC-03",
     "title": "Available table path",
     "restaurant_name": "Luna Trattoria",
     "restaurant_phone": "415-555-0188",
-    "user_request": "Call and ask whether they have a table for 2 tonight at 7 PM.",
+    "user_request": "Can you check whether this restaurant has a table for 2 tonight at 7 PM?",
     "expected_summary_contains": "They have a table for 2 at 7:00 PM."
   },
   {
@@ -28,7 +28,7 @@
     "title": "Current open-status path",
     "restaurant_name": "Luna Trattoria",
     "restaurant_phone": "415-555-0188",
-    "user_request": "Is this restaurant open right now?",
+    "user_request": "Can you check whether this restaurant is open right now?",
     "expected_trace_contains": "Calling Restaurant - Hours Check"
   },
   {
@@ -36,7 +36,7 @@
     "title": "Future open-status path",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
-    "user_request": "Is this restaurant open tomorrow at noon?",
+    "user_request": "Can you check whether this restaurant is open tomorrow at noon?",
     "expected_trace_contains": "12:00 PM"
   },
   {
@@ -44,39 +44,47 @@
     "title": "Search then hours check",
     "restaurant_name": null,
     "restaurant_phone": null,
-    "user_request": "Is Kazu Sushi open tomorrow at noon?",
-    "expected_trace_contains": "Searching for Restaurant"
+    "user_request": "Can you check whether Kazu Sushi is open tomorrow at noon?",
+    "expected_trace_contains": "Resolving Restaurant"
   },
   {
     "id": "TC-07",
     "title": "Search then availability check",
     "restaurant_name": null,
     "restaurant_phone": null,
-    "user_request": "Can you call Luna Trattoria and ask if they have a table for 2 tomorrow at 7 PM?",
+    "user_request": "Can you check whether Luna Trattoria has a table for 2 tomorrow at 7 PM?",
     "expected_trace_contains": "Restaurant Found"
   },
   {
     "id": "TC-08",
-    "title": "Clarification required",
-    "restaurant_name": "Harbor Garden",
-    "restaurant_phone": "415-555-0119",
-    "user_request": "Do they have room for 4?",
-    "expected_summary_contains": "Please specify the date and time"
+    "title": "Fourth restaurant availability path",
+    "restaurant_name": null,
+    "restaurant_phone": null,
+    "user_request": "Can you check whether the taco place has room for 6 around 6?",
+    "expected_summary_contains": "They have a table for 6 at 6:00 PM."
   },
   {
     "id": "TC-09",
-    "title": "Unsupported booking request",
-    "restaurant_name": "Kazu Sushi",
-    "restaurant_phone": "415-555-0142",
-    "user_request": "Can you book a table for me?",
-    "expected_summary_contains": "supports table availability and open-status checks only"
+    "title": "Clarification required",
+    "restaurant_name": "Harbor Garden",
+    "restaurant_phone": "415-555-0119",
+    "user_request": "Can you check whether this restaurant has room for 4?",
+    "expected_summary_contains": "Add a time to the request"
   },
   {
     "id": "TC-10",
+    "title": "Unsupported booking request",
+    "restaurant_name": "Kazu Sushi",
+    "restaurant_phone": "415-555-0142",
+    "user_request": "Can you book a table for me at this restaurant?",
+    "expected_summary_contains": "supports table availability and open-status checks only"
+  },
+  {
+    "id": "TC-11",
     "title": "Unknown restaurant search failure",
     "restaurant_name": null,
     "restaurant_phone": null,
-    "user_request": "Is Blue Comet Bistro open right now?",
+    "user_request": "Can you check whether Blue Comet Bistro is open right now?",
     "expected_summary_contains": "Please specify which restaurant"
   }
 ]

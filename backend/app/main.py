@@ -15,7 +15,7 @@ from .mock_data import RESTAURANTS
 from .restaurant_search import public_restaurant
 from .schemas import AgentRequest
 
-app = FastAPI(title="Restaurant Agent Demo")
+app = FastAPI(title="TableCall Restaurant Agent")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +27,7 @@ app.add_middleware(
 
 @app.get("/api/restaurants")
 def list_restaurants() -> list[dict]:
-    """Expose demo restaurants so the frontend can populate the selector."""
+    """Expose restaurants so the frontend can populate the selector."""
 
     return [public_restaurant(restaurant) for restaurant in RESTAURANTS]
 

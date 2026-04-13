@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Restaurant Agent</title>
+    <title>TableCall</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="shell topbar-inner">
         <div>
-          <div class="brand">Restaurant Agent</div>
-          <div class="tagline">Local demo for availability and hours checks</div>
+          <div class="brand">TableCall</div>
+          <div class="tagline">Restaurant availability and hours from one natural request</div>
         </div>
         <div id="run-status" class="status-pill">Ready</div>
       </div>
@@ -21,23 +21,23 @@
       <section class="request-panel">
         <div class="photo-strip" aria-hidden="true"></div>
         <div class="panel-card request-card">
-          <p class="eyebrow">Ask the agent</p>
-          <h1>Check a restaurant without making the call yourself.</h1>
+          <p class="eyebrow">Restaurant agent</p>
+          <h1>Check a table or open hours in one request.</h1>
           <p class="lede">
-            Choose a restaurant on file, or let the agent infer it from your request.
+            Select a known restaurant, or describe the place naturally with auto-detect.
           </p>
 
           <form id="agent-form" autocomplete="off">
             <div class="mode-grid">
               <label class="field">
-                Restaurant on file
-                <select id="restaurant-select" aria-label="Restaurant on file"></select>
+                Restaurant
+                <select id="restaurant-select" aria-label="Restaurant"></select>
               </label>
               <label class="search-toggle">
                 <input type="checkbox" id="search-mode" />
                 <span>
                   <strong>Auto-detect</strong>
-                  <small>Use request text like "the sushi place"</small>
+                  <small>Resolve by name, cuisine, or description</small>
                 </span>
               </label>
             </div>
@@ -45,12 +45,12 @@
             <div id="restaurant-details" class="restaurant-details"></div>
 
             <label class="field request-field">
-              Request
-              <textarea id="user-request" rows="4" required>check if the sushi place is avaliable at 6</textarea>
+              Your request
+              <textarea id="user-request" rows="4" required>Can you check whether the sushi place has a table for 2 tonight at 6?</textarea>
             </label>
 
             <button type="submit" id="submit-btn" class="submit-btn">
-              <span class="btn-label">Check restaurant</span>
+              <span class="btn-label">Run check</span>
               <span class="spinner" hidden></span>
             </button>
           </form>
@@ -58,36 +58,38 @@
 
         <div class="panel-card examples-card">
           <div class="section-heading">
-            <h2>Try these</h2>
-            <span>Demo-ready prompts</span>
+            <h2>Common requests</h2>
+            <span>Click to run</span>
           </div>
-          <button class="example-btn" data-example="natural" type="button">check if the sushi place is avaliable at 6</button>
-          <button class="example-btn" data-example="table" type="button">Table for 2 tonight at 7 PM</button>
-          <button class="example-btn" data-example="open" type="button">Is this restaurant open right now?</button>
-          <button class="example-btn" data-example="search" type="button">Is Kazu Sushi open tomorrow at noon?</button>
-          <button class="example-btn" data-example="clarify" type="button">Do they have room for 4?</button>
+          <button class="example-btn" data-example="natural" type="button">Can you check whether the sushi place has a table for 2 tonight at 6?</button>
+          <button class="example-btn" data-example="table" type="button">Can you ask this restaurant about a table for 2 tonight at 7 PM?</button>
+          <button class="example-btn" data-example="tacos" type="button">Can you check whether the taco place has room for 6 around 6?</button>
+          <button class="example-btn" data-example="open" type="button">Can you check whether this restaurant is open right now?</button>
+          <button class="example-btn" data-example="search" type="button">Can you check whether Kazu Sushi is open tomorrow at noon?</button>
+          <button class="example-btn" data-example="clarify" type="button">Can you check whether this restaurant has room for 4?</button>
+          <button class="example-btn" data-example="unsupported" type="button">Can you book a table for me at this restaurant?</button>
         </div>
       </section>
 
       <section class="response-panel">
         <article class="answer-card">
           <p class="eyebrow">Answer</p>
-          <div id="final-answer" class="answer-text">Ask a question to check availability or hours.</div>
-          <div id="answer-context" class="answer-context">The agent will call a mock restaurant tool and summarize the result here.</div>
+          <div id="final-answer" class="answer-text">Ready for a restaurant request.</div>
+          <div id="answer-context" class="answer-context">Results appear here after the agent checks availability or hours.</div>
         </article>
 
         <article class="trace-card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">Behind the scenes</p>
-              <h2>How the agent handled it</h2>
+              <h2>Agent trace</h2>
             </div>
-            <button id="trace-toggle" class="ghost-btn" type="button">Hide trace</button>
+            <button id="trace-toggle" class="ghost-btn" type="button">Show trace</button>
           </div>
-          <div id="pipeline" class="pipeline">
+          <div id="pipeline" class="pipeline" hidden>
             <div class="empty-state">
-              <strong>No run yet.</strong>
-              <span>Intent, restaurant lookup, tool call, and tool result will appear here.</span>
+              <strong>No trace yet.</strong>
+              <span>Planning, resolution, tool calls, and results appear after a request.</span>
             </div>
           </div>
         </article>
@@ -95,8 +97,8 @@
         <article class="directory-card">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Mock restaurant data</p>
-              <h2>Local directory</h2>
+              <p class="eyebrow">Restaurant directory</p>
+              <h2>Operating data</h2>
             </div>
           </div>
           <div class="table-wrap">
@@ -105,9 +107,9 @@
                 <tr>
                   <th>Restaurant</th>
                   <th>Type</th>
-                  <th>Hours Today</th>
-                  <th>Useful aliases</th>
-                  <th>Tonight</th>
+                  <th>Today</th>
+                  <th>Aliases</th>
+                  <th>Availability sample</th>
                 </tr>
               </thead>
               <tbody id="restaurant-table"></tbody>

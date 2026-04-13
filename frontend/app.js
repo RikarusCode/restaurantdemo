@@ -3,32 +3,46 @@ const API_BASE = window.location.origin;
 const EXAMPLES = {
   natural: {
     restaurant: null,
-    request: "check if the sushi place is avaliable at 6",
+    request: "Can you check whether the sushi place has a table for 2 tonight at 6?",
     search: true,
   },
   table: {
     restaurant: "Kazu Sushi",
-    request: "Call this restaurant and ask if they have a table for 2 tonight at 7 PM.",
+    request: "Can you ask this restaurant about a table for 2 tonight at 7 PM?",
     search: false,
   },
   open: {
     restaurant: "Luna Trattoria",
-    request: "Is this restaurant open right now?",
+    request: "Can you check whether this restaurant is open right now?",
     search: false,
+  },
+  tacos: {
+    restaurant: null,
+    request: "Can you check whether the taco place has room for 6 around 6?",
+    search: true,
   },
   search: {
     restaurant: null,
-    request: "Is Kazu Sushi open tomorrow at noon?",
+    request: "Can you check whether Kazu Sushi is open tomorrow at noon?",
     search: true,
   },
   clarify: {
     restaurant: "Harbor Garden",
-    request: "Do they have room for 4?",
+    request: "Can you check whether this restaurant has room for 4?",
+    search: false,
+  },
+  unsupported: {
+    restaurant: "Kazu Sushi",
+    request: "Can you book a table for me at this restaurant?",
     search: false,
   },
 };
 
 const STEP_LABELS = {
+  llm_planning: "LLM",
+  llm_decision: "LLM",
+  agent_loop: "Loop",
+  local_parser: "Fallback",
   restaurant_info: "Restaurant",
   understanding: "Understood",
   tool_call: "Tool",
@@ -38,7 +52,7 @@ const STEP_LABELS = {
 };
 
 let restaurants = [];
-let traceVisible = true;
+let traceVisible = false;
 
 const restaurantSelect = document.getElementById("restaurant-select");
 const restaurantDetails = document.getElementById("restaurant-details");
@@ -127,21 +141,27 @@ function setSearchMode(enabled) {
 
 function setLoading(enabled) {
   submitButton.disabled = enabled;
-  submitButton.querySelector(".btn-label").textContent = enabled ? "Checking..." : "Check restaurant";
+  submitButton.querySelector(".btn-label").textContent = enabled ? "Checking..." : "Run check";
   submitButton.querySelector(".spinner").hidden = !enabled;
   runStatus.textContent = enabled ? "Running" : "Ready";
 }
 
 function resetRunState() {
   pipeline.innerHTML = "";
-  finalAnswer.textContent = "Checking the restaurant...";
-  answerContext.textContent = "The response will update as soon as the tool result is ready.";
+  finalAnswer.textContent = "Checking...";
+  answerContext.textContent = "The agent is planning the request and selecting the next tool.";
+}
+
+function syncTraceVisibility() {
+  pipeline.hidden = !traceVisible;
+  traceToggle.textContent = traceVisible ? "Hide trace" : "Show trace";
+  traceToggle.setAttribute("aria-expanded", String(traceVisible));
 }
 
 function renderStep(step, index) {
   if (step.step === "summary") {
     finalAnswer.textContent = step.data.text;
-    answerContext.textContent = "Completed with a mocked restaurant-call tool.";
+    answerContext.textContent = "Resolved through the agent planner and restaurant tool.";
   }
 
   const element = document.createElement("article");
@@ -151,7 +171,16 @@ function renderStep(step, index) {
   const label = STEP_LABELS[step.step] || "Step";
   const number = step.step === "summary" ? "OK" : String(index + 1).padStart(2, "0");
 
-  if (step.step === "restaurant_info") {
+  if (step.step === "llm_planning" || step.step === "llm_decision" || step.step === "agent_loop") {
+    element.innerHTML = `
+      <div class="step-marker">${number}</div>
+      <div class="step-content agent-step">
+        <div class="step-label">${escapeHtml(label)}</div>
+        <h3>${escapeHtml(step.title)}</h3>
+        ${renderKeyValueList(step.data)}
+      </div>
+    `;
+  } else if (step.step === "restaurant_info") {
     element.innerHTML = `
       <div class="step-marker">${number}</div>
       <div class="step-content">
@@ -191,6 +220,19 @@ function renderStep(step, index) {
   pipeline.appendChild(element);
 }
 
+function renderKeyValueList(data) {
+  return `
+    <dl class="kv-list">
+      ${Object.entries(data).map(([key, value]) => `
+        <div>
+          <dt>${escapeHtml(key.replaceAll("_", " "))}</dt>
+          <dd>${escapeHtml(formatValue(value))}</dd>
+        </div>
+      `).join("")}
+    </dl>
+  `;
+}
+
 function renderUnderstanding(data) {
   const chips = Object.entries(data)
     .filter(([key, value]) => key !== "assumptions" && value !== null && value !== undefined)
@@ -206,14 +248,14 @@ function renderUnderstanding(data) {
 }
 
 function renderError(message) {
-  finalAnswer.textContent = "I could not reach the local backend.";
+  finalAnswer.textContent = "The local service is unavailable.";
   answerContext.textContent = message;
   pipeline.innerHTML = `
     <article class="trace-step trace-error">
       <div class="step-marker">!</div>
       <div class="step-content">
         <div class="step-label">Error</div>
-        <h3>Backend unavailable</h3>
+        <h3>Service unavailable</h3>
         <p>${escapeHtml(message)}</p>
       </div>
     </article>
@@ -284,6 +326,12 @@ function prettyJson(value) {
   return escapeHtml(JSON.stringify(value, null, 2));
 }
 
+function formatValue(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return value ?? "";
+}
+
 function escapeHtml(value) {
   const element = document.createElement("div");
   element.textContent = value ?? "";
@@ -295,8 +343,7 @@ searchMode.addEventListener("change", () => setSearchMode(searchMode.checked));
 form.addEventListener("submit", runAgent);
 traceToggle.addEventListener("click", () => {
   traceVisible = !traceVisible;
-  pipeline.hidden = !traceVisible;
-  traceToggle.textContent = traceVisible ? "Hide trace" : "Show trace";
+  syncTraceVisibility();
 });
 
 document.querySelectorAll("[data-example]").forEach((button) => {
@@ -318,3 +365,4 @@ document.querySelectorAll("[data-example]").forEach((button) => {
 });
 
 loadRestaurants();
+syncTraceVisibility();

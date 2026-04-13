@@ -1,66 +1,75 @@
-# Restaurant Agent Demo
+# TableCall Restaurant Agent
 
-A small end-to-end demo for the assignment: the user gives a restaurant-related request, an LLM-style agent understands the task, triggers a restaurant-call tool, receives a result, and returns a short summary.
+TableCall is a local web app for checking restaurant availability and hours through an agentic call flow. A user asks in natural language, the LLM chooses the appropriate tool, the backend executes a deterministic restaurant-call action against local restaurant data, and the app returns a concise answer with an integrated trace of the loop.
 
-The main path assumes restaurant name and phone are already available, as requested. The search feature is also implemented as a first-class mode: when no restaurant is selected, the agent uses a restaurant lookup tool before making the mocked call.
+The main product path assumes a restaurant is already selected by the system. Auto-detect mode extends that flow by resolving restaurants from phrases like "the sushi place", "the taco place", or "the waterfront place" before checking availability or hours.
 
-## What This Demonstrates
+## Capabilities
 
-- Intent understanding for two supported tasks:
-  - table availability
-  - open-status / hours checks
-- Tool calling through a mocked restaurant-call layer.
-- A streamed trace that makes each agent step visible in the UI.
-- Natural restaurant lookup with aliases such as "the sushi place" or "the Italian place."
-- Deterministic fallback behavior when no OpenAI API key is configured.
-- Fully implemented restaurant search mode using the local demo directory.
+- Check table availability by party size, date, and time.
+- Check whether a restaurant is open now or at a specified time.
+- Resolve restaurants by name, cuisine, neighborhood, style, or alias.
+- Show the LLM planning step, selected tool, tool execution, and tool result.
+- Use a deterministic fallback parser if an LLM provider is unavailable.
+- Serve the polished frontend and FastAPI backend from one local command.
 
-## Demo Flow
+## Agent Flow
 
 ```text
 User request
-  -> restaurant on file, or search_restaurant tool
-  -> request understood step
-  -> restaurant-call tool invocation
-  -> mocked restaurant result
-  -> final one-sentence answer
+  -> LLM planning
+  -> LLM-selected tool
+  -> local restaurant data/tool execution
+  -> concise answer
+  -> visible trace for transparency
 ```
 
-The mocked call layer is intentional. It keeps the assessment focused on the agent loop, tool boundary, reliability, and user experience without adding telephony setup, scraping, databases, queues, or other production infrastructure.
+For provider compatibility and reliability, the LLM is responsible for planning and tool selection. The backend owns tool execution and final deterministic formatting, which keeps the product snappy and prevents the model from inventing restaurant facts.
 
-## Supported Requests
+## Example Use Cases
 
-| Request type | Example |
+| Request | Expected behavior |
 | --- | --- |
-| Table availability | "Call this restaurant and ask if they have a table for 2 tonight at 7 PM." |
-| Open status | "Is this restaurant open right now?" |
-| Search plus open status | "Is Kazu Sushi open tomorrow at noon?" |
-| Natural shorthand | "check if the sushi place is avaliable at 6" |
-| Clarification | "Do they have room for 4?" |
-| Unsupported | "Can you book a table for me?" |
+| `Can you check whether the sushi place has a table for 2 tonight at 6?` | Resolves Kazu Sushi by alias and checks availability at 6:00 PM. |
+| `Can you ask this restaurant about a table for 2 tonight at 7 PM?` | Uses the selected restaurant and returns the nearest available time if 7 PM is booked. |
+| `Can you check whether the taco place has room for 6 around 6?` | Resolves Nopalito Verde and checks availability for 6 guests at 6:00 PM. |
+| `Can you check whether this restaurant is open right now?` | Calls the hours tool for the selected restaurant. |
+| `Can you check whether Kazu Sushi is open tomorrow at noon?` | Resolves Kazu Sushi and checks open status at tomorrow noon. |
+| `Can you check whether this restaurant has room for 4?` | Recognizes an availability request but asks for the missing time. |
+| `Can you book a table for me at this restaurant?` | Explains that booking is outside the supported product scope. |
+
+## Restaurant Data
+
+The local directory contains four restaurants with diverse operating data:
+
+| Restaurant | Type | Search aliases |
+| --- | --- | --- |
+| Kazu Sushi | Japanese sushi bar | `sushi place`, `japanese place`, `sushi spot` |
+| Luna Trattoria | Italian trattoria | `italian place`, `pasta place`, `trattoria` |
+| Harbor Garden | Waterfront seafood | `seafood place`, `fish place`, `waterfront place` |
+| Nopalito Verde | Plant-forward Mexican cantina | `taco place`, `mexican place`, `vegetarian place` |
+
+Each restaurant includes:
+
+- weekly hours
+- capacity and maximum party size
+- reservation policy
+- lunch, dinner, and tomorrow availability slots
+- party-size constraints
+- unavailable slots and alternative-time behavior
 
 ## Architecture
 
 | File | Purpose |
 | --- | --- |
-| `backend/app/main.py` | FastAPI app, `/agent/run` streaming endpoint, static frontend serving |
-| `backend/app/agent.py` | Agent orchestration, OpenAI tool-calling path, deterministic fallback path |
-| `backend/app/tools.py` | Tool definitions and mocked tool execution |
-| `backend/app/restaurant_search.py` | Restaurant lookup helper for the search feature |
-| `backend/app/mock_data.py` | Three demo restaurants with aliases, hours, policies, capacity, and availability slots |
-| `backend/app/schemas.py` | API request and streamed trace models |
-| `backend/app/config.py` | Minimal environment loading |
-| `frontend/` | Plain HTML, CSS, and JavaScript UI |
-
-## Why This Matches The Assignment
-
-The assignment asks for a simple LLM agent that calls a restaurant. This project keeps the scope tight:
-
-- No auth, database, Docker, migrations, queues, or framework-heavy frontend.
-- Restaurant details are selected by the system for the main demo path.
-- The agent exposes intermediate steps so an evaluator can see the request understanding and tool call.
-- The mocked call behaves like the result of a restaurant phone call.
-- Search is included as a real feature, but isolated behind a clean lookup tool.
+| `backend/app/main.py` | FastAPI app, static frontend serving, streamed `/agent/run` endpoint |
+| `backend/app/agent.py` | LLM planner, local fallback parser, visible agent-loop orchestration |
+| `backend/app/tools.py` | OpenAI-compatible tool definitions and deterministic tool execution |
+| `backend/app/mock_data.py` | Restaurant directory, hours, availability, search aliases, and availability helpers |
+| `backend/app/restaurant_search.py` | Restaurant search and public restaurant serialization |
+| `backend/app/schemas.py` | Pydantic API and trace models |
+| `backend/app/config.py` | Provider configuration for Lava, K2, and OpenAI-compatible APIs |
+| `frontend/` | Product UI with request entry, answer card, trace panel, and data table |
 
 ## Setup
 
@@ -75,15 +84,15 @@ cd ..
 copy .env.example .env
 ```
 
-Add Lava credentials to `.env` for the LLM tool-calling path:
+Configure one LLM provider in `.env`. Lava is preferred when present:
 
 ```text
 LAVA_API_BASE_URL=https://api.lava.so/v1
 LAVA_SECRET_KEY=your-key-here
-LAVA_MODEL=your-lava-model
+LAVA_MODEL=gpt-4.1-mini
 ```
 
-The app also supports K2 and OpenAI-compatible credentials as fallbacks:
+K2 and standard OpenAI-compatible credentials are also supported:
 
 ```text
 K2_BASE_URL=https://api.k2think.ai/v1
@@ -94,7 +103,7 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-If none of `LAVA_SECRET_KEY`, `K2_API_KEY`, or `OPENAI_API_KEY` is set, the app still runs with a deterministic fallback parser so the demo remains easy to present.
+If no provider key is configured, TableCall still runs with the deterministic local parser.
 
 ## Run
 
@@ -110,30 +119,13 @@ Open:
 http://localhost:8000
 ```
 
-The frontend is served by FastAPI, so there is no separate frontend build step.
+## Product Boundaries
 
-## Demo Script
+TableCall supports availability and open-status checks. It does not place real reservations, call live phone numbers, scrape restaurant websites, or process menu/order requests. The restaurant-call action is intentionally local and deterministic so the agent loop can be evaluated reliably and extended later with a real calling or reservation provider.
 
-1. Start with Kazu Sushi selected.
-2. Click "Table for 2 tonight at 7 PM."
-3. Point out the trace: restaurant on file, request understood, tool call, restaurant response, final answer.
-4. Click "Is this restaurant open right now?"
-5. Click "check if the sushi place is avaliable at 6" to show alias lookup, typo tolerance, and time assumptions.
-6. Click "Is Kazu Sushi open tomorrow at noon?" to show search mode.
-7. Click "Do they have room for 4?" to show the clarification path.
-8. Try "Can you book a table for me?" to show unsupported handling.
+## Future Improvements
 
-## Mock Restaurants
-
-| Name | Phone | Cuisine |
-| --- | --- | --- |
-| Kazu Sushi | 415-555-0142 | Japanese |
-| Luna Trattoria | 415-555-0188 | Italian |
-| Harbor Garden | 415-555-0119 | Seafood |
-
-## Tradeoffs And Future Improvements
-
-- The restaurant call is mocked to keep the demo reliable and self-contained.
-- Search uses the local restaurant directory; a production version could swap in Google Places or another provider behind `restaurant_search.py`.
-- Time parsing is intentionally lightweight and tuned for demo phrases.
-- A production version would add tests, observability, rate limiting, secrets management, and a real telephony or reservation integration.
+- Add automated tests for the LLM planner contract, fallback parser, and availability edge cases.
+- Replace the local restaurant directory with a real Places provider behind the existing search boundary.
+- Add a real telephony or reservation integration behind the existing tool executor.
+- Add observability around provider latency, fallback rate, and tool outcomes.

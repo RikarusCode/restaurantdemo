@@ -1,4 +1,4 @@
-"""Restaurant agent orchestration using OpenAI tool calling with a fast fallback."""
+"""Restaurant agent orchestration using an LLM planner plus deterministic tools."""
 
 from __future__ import annotations
 
@@ -14,54 +14,48 @@ from .tools import SEARCH_TOOL_DEFINITION, TOOL_DEFINITIONS, TOOL_DISPLAY_NAMES,
 
 Step = dict[str, Any]
 
-SUPPORTED_MESSAGE = "This demo supports table availability and open-status checks only."
-CLARIFICATION_MESSAGE = "Please specify the date and time you would like me to check."
-MAX_TOOL_ROUNDS = 4
+SUPPORTED_MESSAGE = "This product currently supports table availability and open-status checks only."
+CLARIFICATION_MESSAGE = (
+    "Add a time to the request, for example: "
+    "'Can you check whether this restaurant has room for 4 tonight at 7 PM?'"
+)
+LLM_TIMEOUT_SECONDS = 20.0
 
 SYSTEM_PROMPT = """\
-You are a concise restaurant phone assistant for a demo.
+You are a concise restaurant-calling agent.
 
-Restaurant already on file:
+Restaurant on file:
 Name: {restaurant_name}
 Phone: {restaurant_phone}
 
-Supported tasks:
-- Ask whether a table is available for a party size, date, and time.
-- Ask whether the restaurant is open now or at a specified time.
+Your job is to choose the correct tool for the user's request. Supported tasks:
+- Check table availability for a party size, date, and time.
+- Check whether the restaurant is open now or at a specified time.
 
-Use exactly one of the provided restaurant-call tools for supported requests.
-Do not call a table-availability tool unless party size, date, and time are present.
-If party size is missing for availability, assume 2 guests.
-If date is missing for availability, assume tonight.
-If the user says a dinner-hour time like "at 6" without AM/PM, interpret it as 6:00 PM.
-If details are missing, ask for clarification without calling a tool.
-If the user asks to book, reserve, order, see a menu, complain, or do anything else,
-say that this demo supports table availability and open-status checks only.
-Do not invent restaurant details or call results. Relay only tool output.
-Keep the final answer to one polished sentence.
+For availability, assume 2 guests when party size is missing, assume tonight
+when date is missing, and interpret bare dinner-hour times like "at 6" as
+6:00 PM. If the time is missing, ask for clarification without calling a tool.
+If the request is outside the supported tasks, explain the supported scope.
+Do not invent restaurant facts or call results.
+Do not ask the user to confirm reasonable assumptions. This is a single-turn
+tool product, not a chat assistant. If the request is supported and has enough
+information, call the tool.
 """
 
 SYSTEM_PROMPT_SEARCH = """\
-You are a concise restaurant phone assistant for a demo.
+You are a concise restaurant-calling agent.
 
-No restaurant is on file. For supported requests, first use search_restaurant
-to find restaurant details from the user's text, then call the relevant
-restaurant tool.
+No restaurant is selected yet. For supported requests, first use
+search_restaurant to resolve the restaurant from the user's words. The search
+query can be a proper name, cuisine, neighborhood, or natural description such
+as "the sushi place", "the Italian place", "the waterfront place", or
+"the taco place".
 
-Supported tasks:
-- Ask whether a table is available for a party size, date, and time.
-- Ask whether the restaurant is open now or at a specified time.
-
-If no restaurant name is present, ask the user to specify a restaurant.
-Do not call a table-availability tool unless party size, date, and time are present.
-If party size is missing for availability, assume 2 guests.
-If date is missing for availability, assume tonight.
-If the user says a dinner-hour time like "at 6" without AM/PM, interpret it as 6:00 PM.
-If details are missing, ask for clarification without calling a tool.
-If the user asks to book, reserve, order, see a menu, complain, or do anything else,
-say that this demo supports table availability and open-status checks only.
-Do not invent restaurant details or call results. Relay only tool output.
-Keep the final answer to one polished sentence.
+After the restaurant is resolved, the backend will continue the agent loop
+against that restaurant. If no restaurant clue exists, ask the user to specify
+which restaurant to call.
+Do not ask the user to confirm an inferred restaurant. Use search_restaurant
+when a supported request includes a plausible restaurant clue.
 """
 
 
@@ -70,7 +64,9 @@ def run_agent(
     restaurant_name: str | None,
     restaurant_phone: str | None,
 ) -> Generator[Step, None, None]:
-    """Yield visible pipeline steps for the agent request."""
+    """Yield visible pipeline steps for a restaurant-agent request."""
+
+    text = user_request.lower()
 
     if restaurant_name and restaurant_phone:
         yield _step(
@@ -79,6 +75,21 @@ def run_agent(
             {"name": restaurant_name, "phone": restaurant_phone, "source": "selected_by_system"},
         )
 
+    if _is_availability_request(text) and not _extract_time(text):
+        yield _step(
+            "understanding",
+            "Request Needs Time",
+            {
+                "intent": "check_table_availability",
+                "party_size": _extract_party_size(text) or 2,
+                "date": _extract_date(text) or "tonight",
+                "time": None,
+                "missing": "time",
+            },
+        )
+        yield _step("summary", "Final Answer", {"text": CLARIFICATION_MESSAGE})
+        return
+
     if settings.llm_api_key:
         try:
             yield from _run_with_llm(user_request, restaurant_name, restaurant_phone)
@@ -86,14 +97,14 @@ def run_agent(
         except Exception as exc:
             yield _step(
                 "notice",
-                "Using Local Fast Path",
+                "Local Parser Took Over",
                 {
-                    "message": "The configured LLM provider was unavailable, so the local parser handled this request.",
+                    "message": "The configured LLM provider was unavailable, so the deterministic parser handled the request.",
                     "error": exc.__class__.__name__,
                 },
             )
 
-    yield from _run_without_llm(user_request, restaurant_name, restaurant_phone)
+    yield from _run_without_llm(user_request, restaurant_name, restaurant_phone, include_parser_step=True)
 
 
 def _run_with_llm(
@@ -101,91 +112,139 @@ def _run_with_llm(
     restaurant_name: str | None,
     restaurant_phone: str | None,
 ) -> Generator[Step, None, None]:
-    client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url, timeout=3.0, max_retries=0)
     has_restaurant = bool(restaurant_name and restaurant_phone)
-    system_prompt = (
+    tools = list(TOOL_DEFINITIONS) if has_restaurant else [SEARCH_TOOL_DEFINITION]
+    prompt = (
         SYSTEM_PROMPT.format(restaurant_name=restaurant_name, restaurant_phone=restaurant_phone)
         if has_restaurant
         else SYSTEM_PROMPT_SEARCH
     )
-    tools = list(TOOL_DEFINITIONS) if has_restaurant else [SEARCH_TOOL_DEFINITION, *TOOL_DEFINITIONS]
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_request},
-    ]
-
-    for _ in range(MAX_TOOL_ROUNDS):
-        response = client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            tools=_as_chat_tools(tools),
-            tool_choice="auto",
-        )
-        message = response.choices[0].message
-        tool_calls = message.tool_calls or []
-
-        if not tool_calls:
-            yield _step("summary", "Final Answer", {"text": _clean_summary(message.content)})
-            return
-
-        messages.append(message.model_dump(exclude_none=True))
-
-        for tool_call in tool_calls:
-            args = json.loads(tool_call.function.arguments or "{}")
-            tool_name = tool_call.function.name
-
-            if tool_name != "search_restaurant":
-                yield _step("understanding", "Request Understood", _understanding_from_tool(tool_name, args))
-
-            yield _step(
-                "tool_call",
-                TOOL_DISPLAY_NAMES.get(tool_name, tool_name),
-                {"tool_name": tool_name, "arguments": args},
-            )
-
-            result = execute_tool(tool_name, args, restaurant_name, restaurant_phone)
-
-            if tool_name == "search_restaurant" and result.get("success"):
-                restaurant_name = result["name"]
-                restaurant_phone = result["phone"]
-                yield _step(
-                    "restaurant_info",
-                    "Restaurant Found",
-                    {
-                        "name": restaurant_name,
-                        "phone": restaurant_phone,
-                        "cuisine": result.get("cuisine"),
-                        "address": result.get("address"),
-                        "source": "search_restaurant",
-                        "resolution": result.get("resolution"),
-                    },
-                )
-
-            yield _step("tool_result", "Restaurant Response", result)
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result),
-                }
-            )
 
     yield _step(
-        "summary",
-        "Final Answer",
-        {"text": "I could not complete the tool call in time. Try the request again."},
+        "llm_planning",
+        "LLM Planning",
+        {
+            "provider": settings.llm_provider,
+            "model": settings.llm_model,
+            "restaurant_context": "selected" if has_restaurant else "needs_search",
+            "available_tools": [tool["name"] for tool in tools],
+        },
     )
+
+    client = OpenAI(
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        timeout=LLM_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
+    response = client.chat.completions.create(
+        model=settings.llm_model,
+        messages=[{"role": "system", "content": prompt}, {"role": "user", "content": user_request}],
+        tools=_as_chat_tools(tools),
+        tool_choice="auto",
+    )
+    message = response.choices[0].message
+    tool_calls = message.tool_calls or []
+
+    if not tool_calls:
+        if _should_force_tool_path(user_request):
+            yield _step(
+                "notice",
+                "Decisive Tool Guardrail",
+                {
+                    "message": "The LLM returned conversational text without a tool call, so the backend continued with the tool path for this supported single-turn request.",
+                    "llm_text": _clean_summary(message.content),
+                },
+            )
+            yield from _run_without_llm(user_request, restaurant_name, restaurant_phone)
+            return
+
+        yield _step("summary", "Final Answer", {"text": _clean_summary(message.content)})
+        return
+
+    tool_call = tool_calls[0]
+    tool_name = tool_call.function.name
+    args = json.loads(tool_call.function.arguments or "{}")
+
+    yield _step(
+        "llm_decision",
+        "LLM Selected Tool",
+        {
+            "tool_name": tool_name,
+            "tool_args": args,
+            "why_it_matters": "The model converted the user's natural language into a concrete action.",
+        },
+    )
+
+    if tool_name != "search_restaurant":
+        yield _step("understanding", "Request Understood", _understanding_from_tool(tool_name, args))
+
+    yield _step(
+        "tool_call",
+        TOOL_DISPLAY_NAMES.get(tool_name, tool_name),
+        {
+            "tool_name": tool_name,
+            "arguments": args,
+            "executor": "hybrid_llm_directory_resolver" if tool_name == "search_restaurant" else "mock_restaurant_call",
+        },
+    )
+    result = execute_tool(tool_name, args, restaurant_name, restaurant_phone)
+    yield _step(
+        "tool_result",
+        "Directory Result" if tool_name == "search_restaurant" else "Restaurant Response",
+        result,
+    )
+
+    if tool_name == "search_restaurant":
+        if not result.get("success"):
+            yield _step("summary", "Final Answer", {"text": "Please specify which restaurant you want me to call."})
+            return
+
+        restaurant_name = result["name"]
+        restaurant_phone = result["phone"]
+        yield _step(
+            "restaurant_info",
+            "Restaurant Found",
+            {
+                "name": restaurant_name,
+                "phone": restaurant_phone,
+                "cuisine": result.get("cuisine"),
+                "address": result.get("address"),
+                "source": "search_restaurant",
+                "resolution": result.get("resolution"),
+            },
+        )
+        yield _step(
+            "agent_loop",
+            "Agent Loop Continues",
+            {
+                "message": "The LLM chose the search tool. The resolver used exact matching, LLM semantics, or fallback search, then the agent continued with restaurant context.",
+                "next_context": restaurant_name,
+            },
+        )
+        yield from _run_with_llm(user_request, restaurant_name, restaurant_phone)
+        return
+
+    yield _step("summary", "Final Answer", {"text": _summary_from_tool_result(_tool_result_kind(tool_name), result)})
 
 
 def _run_without_llm(
     user_request: str,
     restaurant_name: str | None,
     restaurant_phone: str | None,
+    include_parser_step: bool = False,
 ) -> Generator[Step, None, None]:
     text = user_request.lower()
 
+    if include_parser_step:
+        yield _step(
+            "local_parser",
+            "Deterministic Fallback",
+            {"message": "Local heuristics are handling the same tool loop without an LLM call."},
+        )
+
     if _is_unsupported(text):
-        yield _step("understanding", "Request Understood", {"intent": "unsupported", "reason": "outside_demo_scope"})
+        yield _step("understanding", "Request Understood", {"intent": "unsupported", "reason": "outside_supported_scope"})
         yield _step("summary", "Final Answer", {"text": SUPPORTED_MESSAGE})
         return
 
@@ -193,28 +252,28 @@ def _run_without_llm(
         yield _step(
             "tool_call",
             TOOL_DISPLAY_NAMES["search_restaurant"],
-            {"tool_name": "search_restaurant", "arguments": {"query": user_request}},
+            {"tool_name": "search_restaurant", "arguments": {"query": user_request}, "executor": "hybrid_llm_directory_resolver"},
         )
         search_result = execute_tool("search_restaurant", {"query": user_request}, None, None)
-        yield _step("tool_result", "Search Result", search_result)
-        if search_result.get("success"):
-            restaurant_name = search_result["name"]
-            restaurant_phone = search_result["phone"]
-            yield _step(
-                "restaurant_info",
-                "Restaurant Found",
-                {
-                    "name": restaurant_name,
-                    "phone": restaurant_phone,
-                    "cuisine": search_result.get("cuisine"),
-                    "address": search_result.get("address"),
-                    "source": "search_restaurant",
-                    "resolution": search_result.get("resolution"),
-                },
-            )
-        else:
+        yield _step("tool_result", "Directory Result", search_result)
+        if not search_result.get("success"):
             yield _step("summary", "Final Answer", {"text": "Please specify which restaurant you want me to call."})
             return
+
+        restaurant_name = search_result["name"]
+        restaurant_phone = search_result["phone"]
+        yield _step(
+            "restaurant_info",
+            "Restaurant Found",
+            {
+                "name": restaurant_name,
+                "phone": restaurant_phone,
+                "cuisine": search_result.get("cuisine"),
+                "address": search_result.get("address"),
+                "source": "search_restaurant",
+                "resolution": search_result.get("resolution"),
+            },
+        )
 
     if _is_availability_request(text):
         yield from _fallback_availability(text, restaurant_name, restaurant_phone)
@@ -237,18 +296,21 @@ def _fallback_availability(
     requested_date = _extract_date(text) or "tonight"
     requested_time = _extract_time(text)
 
-    understanding = {
-        "intent": "check_table_availability",
-        "party_size": party_size or 2,
-        "date": requested_date,
-        "time": requested_time,
-        "assumptions": {
-            "party_size": "Assumed 2 guests when not specified." if party_size is None else None,
-            "date": "Assumed tonight when not specified." if requested_date == "tonight" and "tonight" not in text else None,
-            "time": "Interpreted bare dinner-hour time as PM." if _has_bare_time(text) else None,
+    yield _step(
+        "understanding",
+        "Request Understood",
+        {
+            "intent": "check_table_availability",
+            "party_size": party_size or 2,
+            "date": requested_date,
+            "time": requested_time,
+            "assumptions": {
+                "party_size": "Assumed 2 guests when not specified." if party_size is None else None,
+                "date": "Assumed tonight when not specified." if requested_date == "tonight" and "tonight" not in text else None,
+                "time": "Interpreted bare dinner-hour time as PM." if _has_bare_time(text) else None,
+            },
         },
-    }
-    yield _step("understanding", "Request Understood", understanding)
+    )
 
     if not requested_time:
         yield _step("summary", "Final Answer", {"text": CLARIFICATION_MESSAGE})
@@ -258,7 +320,7 @@ def _fallback_availability(
     yield _step(
         "tool_call",
         TOOL_DISPLAY_NAMES["call_restaurant_check_availability"],
-        {"tool_name": "call_restaurant_check_availability", "arguments": args},
+        {"tool_name": "call_restaurant_check_availability", "arguments": args, "executor": "mock_restaurant_call"},
     )
     result = execute_tool("call_restaurant_check_availability", args, name, phone)
     yield _step("tool_result", "Restaurant Response", result)
@@ -282,7 +344,7 @@ def _fallback_hours(
     yield _step(
         "tool_call",
         TOOL_DISPLAY_NAMES["call_restaurant_check_hours"],
-        {"tool_name": "call_restaurant_check_hours", "arguments": args},
+        {"tool_name": "call_restaurant_check_hours", "arguments": args, "executor": "mock_restaurant_call"},
     )
     result = execute_tool("call_restaurant_check_hours", args, name, phone)
     yield _step("tool_result", "Restaurant Response", result)
@@ -291,20 +353,19 @@ def _fallback_hours(
 
 def _summary_from_tool_result(kind: str, result: dict[str, Any]) -> str:
     if not result.get("success"):
-        return result.get("error") or "I could not complete that check."
+        return result.get("message") or result.get("error") or "I could not complete that check."
 
     if kind == "availability":
         party_size = result.get("party_size") or "your party"
         requested_time = result.get("requested_time") or "that time"
         assumptions = _format_assumptions(result.get("assumptions", {}))
+        suffix = f" {assumptions}" if assumptions else ""
+
         if result.get("status") == "available":
-            note = f" {assumptions}" if assumptions else ""
-            return f"They have a table for {party_size} at {requested_time}.{note}"
+            return f"They have a table for {party_size} at {requested_time}.{suffix}"
         if result.get("alternative_time"):
-            note = f" {assumptions}" if assumptions else ""
-            return f"They do not have a table for {party_size} at {requested_time}, but {result['alternative_time']} is available.{note}"
-        note = f" {assumptions}" if assumptions else ""
-        return f"They do not have a table for {party_size} at {requested_time}.{note}"
+            return f"They do not have a table for {party_size} at {requested_time}, but {result['alternative_time']} is available.{suffix}"
+        return f"They do not have a table for {party_size} at {requested_time}.{suffix}"
 
     if result.get("is_open"):
         return f"The restaurant is open and closes at {result.get('closes_at')}."
@@ -320,12 +381,16 @@ def _understanding_from_tool(tool_name: str, args: dict[str, Any]) -> dict[str, 
             "time": args.get("time"),
         }
     if tool_name == "call_restaurant_check_hours":
-        return {
-            "intent": "check_open_status",
-            "date": args.get("date"),
-            "time": args.get("time") or "now",
-        }
+        return {"intent": "check_open_status", "date": args.get("date"), "time": args.get("time") or "now"}
     return {"intent": "unknown"}
+
+
+def _tool_result_kind(tool_name: str) -> str:
+    if tool_name == "call_restaurant_check_availability":
+        return "availability"
+    if tool_name == "call_restaurant_check_hours":
+        return "hours"
+    return "unknown"
 
 
 def _extract_party_size(text: str) -> int | None:
@@ -381,11 +446,16 @@ def _is_hours_request(text: str) -> bool:
     return any(word in text for word in ["open", "closed", "hours", "close"])
 
 
+def _should_force_tool_path(user_request: str) -> bool:
+    text = user_request.lower()
+    if _is_unsupported(text):
+        return False
+    return _is_availability_request(text) or _is_hours_request(text)
+
+
 def _clean_summary(text: str | None) -> str:
     cleaned = (text or "").strip()
-    if cleaned:
-        return cleaned
-    return "I could not complete that request. Try asking about table availability or opening hours."
+    return cleaned or "I can help with table availability or open-status checks."
 
 
 def _step(step_type: str, title: str, data: dict[str, Any]) -> Step:
@@ -398,23 +468,19 @@ def _has_bare_time(text: str) -> bool:
 
 def _format_assumptions(assumptions: dict[str, Any]) -> str:
     values = [value for value in assumptions.values() if value]
-    if not values:
-        return ""
     return " ".join(values)
 
 
 def _as_chat_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    chat_tools = []
-    for tool in tools:
-        chat_tools.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "parameters": tool["parameters"],
-                    "strict": tool.get("strict", False),
-                },
-            }
-        )
-    return chat_tools
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["parameters"],
+                "strict": tool.get("strict", False),
+            },
+        }
+        for tool in tools
+    ]
