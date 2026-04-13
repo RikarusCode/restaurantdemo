@@ -73,14 +73,15 @@ cd ..
 copy .env.example .env
 ```
 
-Add an OpenAI key to `.env` for the LLM tool-calling path:
+Add K2 credentials to `.env` for the LLM tool-calling path:
 
 ```text
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4.1-mini
+K2_BASE_URL=https://api.k2think.ai/v1
+K2_API_KEY=your-key-here
+K2_MODEL=MBZUAI-IFM/K2-Think-v2
 ```
 
-If `OPENAI_API_KEY` is empty, the app still runs with a deterministic fallback parser so the demo remains easy to present.
+The app also supports `OPENAI_API_KEY` and `OPENAI_MODEL` as a fallback. If neither `K2_API_KEY` nor `OPENAI_API_KEY` is set, the app still runs with a deterministic fallback parser so the demo remains easy to present.
 
 ## Run
 

@@ -9,3 +9,4 @@ The system: reads the request extracts the task details calls a tool or MCP acti
 
 Scope: For this demo, support only a few simple requests: ask for table availability ask whether the restaurant is open. Considering that the restaurant name and phone number are already given by the system, so no restaurant search is needed. 
 Stretch goal: Do restaurant information search on the fly.
+

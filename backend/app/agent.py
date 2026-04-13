@@ -73,7 +73,7 @@ def run_agent(
             {"name": restaurant_name, "phone": restaurant_phone, "source": "selected_by_system"},
         )
 
-    if settings.openai_api_key:
+    if settings.llm_api_key:
         try:
             yield from _run_with_llm(user_request, restaurant_name, restaurant_phone)
             return
@@ -95,7 +95,7 @@ def _run_with_llm(
     restaurant_name: str | None,
     restaurant_phone: str | None,
 ) -> Generator[Step, None, None]:
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
     has_restaurant = bool(restaurant_name and restaurant_phone)
     system_prompt = (
         SYSTEM_PROMPT.format(restaurant_name=restaurant_name, restaurant_phone=restaurant_phone)
@@ -110,7 +110,7 @@ def _run_with_llm(
 
     for _ in range(MAX_TOOL_ROUNDS):
         response = client.responses.create(
-            model=settings.openai_model,
+            model=settings.llm_model,
             input=conversation,
             tools=tools,
         )
