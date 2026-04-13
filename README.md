@@ -50,6 +50,7 @@ The reservation UI state is intentionally explicit:
       "restaurant_name": "Kazu Sushi",
       "restaurant_phone": "+14155550142",
       "location": "214 Linden Street, San Francisco, CA",
+      "guest_name": "",
       "date_heading": "Tonight - Monday, Apr 13, 2026",
       "requested_date": "tonight",
       "time": "6:00 PM",
@@ -116,6 +117,7 @@ Dynamic variables sent to Retell:
 
 ```text
 restaurant_name
+guest_name
 party_size
 reservation_time
 reservation_date
@@ -133,6 +135,7 @@ You are calling a restaurant to help a guest make a reservation.
 
 Reservation details:
 - Restaurant: {{restaurant_name}}
+- Guest name: {{guest_name}}
 - Party size: {{party_size}}
 - Date: {{reservation_date}}
 - Time: {{reservation_time}}
@@ -142,10 +145,11 @@ Reservation details:
 Call flow:
 1. Say: "Hello, is this {{restaurant_name}}?"
 2. Ask whether they have a table for {{party_size}} on {{reservation_date}} at {{reservation_time}}.
-3. If they can hold the table, confirm the reservation details.
-4. If that time is not available, ask whether they have anything within 30 minutes.
-5. If they cannot book it, politely end the call.
-6. Keep the call short and natural.
+3. If {{guest_name}} is provided, ask them to hold the table under {{guest_name}}. If no guest name is provided, ask what name they need for the reservation.
+4. If they can hold the table, confirm the reservation details.
+5. If that time is not available, ask whether they have anything within 30 minutes.
+6. If they cannot book it, politely end the call.
+7. Keep the call short and natural.
 
 After the call, set reservation_confirmed to true only if the restaurant clearly agreed to hold or book the table. Otherwise set it to false.
 ```

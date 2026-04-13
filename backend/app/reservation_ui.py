@@ -91,6 +91,7 @@ def build_reservation_ui_state(user_request: str, result: dict[str, Any]) -> dic
         "restaurant_name": result.get("restaurant_name") or "",
         "restaurant_phone": result.get("restaurant_phone") or "",
         "location": result.get("restaurant_address") or "",
+        "guest_name": "",
         "date_heading": format_reservation_date_heading(result.get("requested_date")),
         "requested_date": result.get("requested_date") or "tonight",
         "time": result.get("requested_time") or "",

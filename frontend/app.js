@@ -199,6 +199,7 @@ function openReservationModal(block) {
 
   document.getElementById("rf-restaurant").value = draft.restaurant_name || "";
   document.getElementById("rf-location").value = draft.location || "";
+  document.getElementById("rf-guest").value = draft.guest_name || "";
   document.getElementById("rf-date").value = draft.date_heading || "";
   document.getElementById("rf-time").value = draft.time || "";
   document.getElementById("rf-party").value = draft.party_size ?? 2;
@@ -444,6 +445,7 @@ reservationForm.addEventListener("submit", async (event) => {
     restaurant_name: document.getElementById("rf-restaurant").value.trim(),
     restaurant_phone: document.getElementById("rf-phone").value.trim(),
     location: document.getElementById("rf-location").value.trim() || null,
+    guest_name: document.getElementById("rf-guest").value.trim() || null,
     party_size: Number(document.getElementById("rf-party").value),
     requested_time: document.getElementById("rf-time").value.trim(),
     date_heading: document.getElementById("rf-date").value.trim(),

@@ -25,6 +25,7 @@ class ReservationCallRequest(StrictModel):
     restaurant_name: str = Field(..., min_length=1)
     restaurant_phone: str = Field(..., min_length=1)
     location: Optional[str] = None
+    guest_name: Optional[str] = None
     party_size: int = Field(..., ge=1, le=99)
     requested_time: str = Field(..., min_length=1)
     date_heading: str = Field(..., min_length=1)

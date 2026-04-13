@@ -90,6 +90,7 @@ def place_reservation_call(
     restaurant_name: str,
     restaurant_phone: str,
     location: str | None,
+    guest_name: str | None,
     party_size: int,
     requested_time: str,
     date_heading: str,
@@ -121,6 +122,7 @@ def place_reservation_call(
     dyn = _dynamic_variables(
         {
             "restaurant_name": restaurant_name,
+            "guest_name": guest_name or "",
             "party_size": party_size,
             "reservation_time": requested_time,
             "reservation_date": date_heading,

@@ -41,6 +41,7 @@ def reservation_call_endpoint(request: ReservationCallRequest) -> ReservationCal
         restaurant_name=request.restaurant_name,
         restaurant_phone=request.restaurant_phone,
         location=request.location,
+        guest_name=request.guest_name,
         party_size=request.party_size,
         requested_time=request.requested_time,
         date_heading=request.date_heading,
