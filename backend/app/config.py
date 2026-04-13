@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(_env_path)
 
+LAVA_API_BASE_URL: str | None = os.getenv("LAVA_API_BASE_URL") or None
+LAVA_SECRET_KEY: str | None = os.getenv("LAVA_SECRET_KEY") or None
+LAVA_MODEL: str | None = os.getenv("LAVA_MODEL") or None
+
 K2_BASE_URL: str | None = os.getenv("K2_BASE_URL") or None
 K2_API_KEY: str | None = os.getenv("K2_API_KEY") or None
 K2_MODEL: str | None = os.getenv("K2_MODEL") or None
@@ -21,19 +25,23 @@ class Settings:
 
     @property
     def llm_api_key(self) -> str | None:
-        return K2_API_KEY or OPENAI_API_KEY
+        return LAVA_SECRET_KEY or K2_API_KEY or OPENAI_API_KEY
 
     @property
     def llm_model(self) -> str:
-        return K2_MODEL or OPENAI_MODEL
+        return LAVA_MODEL or K2_MODEL or OPENAI_MODEL
 
     @property
     def llm_base_url(self) -> str | None:
-        return K2_BASE_URL
+        return LAVA_API_BASE_URL or K2_BASE_URL
 
     @property
     def llm_provider(self) -> str:
-        return "k2" if K2_API_KEY else "openai"
+        if LAVA_SECRET_KEY:
+            return "lava"
+        if K2_API_KEY:
+            return "k2"
+        return "openai"
 
     @property
     def openai_api_key(self) -> str | None:

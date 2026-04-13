@@ -75,15 +75,26 @@ cd ..
 copy .env.example .env
 ```
 
-Add K2 credentials to `.env` for the LLM tool-calling path:
+Add Lava credentials to `.env` for the LLM tool-calling path:
+
+```text
+LAVA_API_BASE_URL=https://api.lava.so/v1
+LAVA_SECRET_KEY=your-key-here
+LAVA_MODEL=your-lava-model
+```
+
+The app also supports K2 and OpenAI-compatible credentials as fallbacks:
 
 ```text
 K2_BASE_URL=https://api.k2think.ai/v1
 K2_API_KEY=your-key-here
 K2_MODEL=MBZUAI-IFM/K2-Think-v2
+
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
 ```
 
-The app also supports `OPENAI_API_KEY` and `OPENAI_MODEL` as a fallback. If neither `K2_API_KEY` nor `OPENAI_API_KEY` is set, the app still runs with a deterministic fallback parser so the demo remains easy to present.
+If none of `LAVA_SECRET_KEY`, `K2_API_KEY`, or `OPENAI_API_KEY` is set, the app still runs with a deterministic fallback parser so the demo remains easy to present.
 
 ## Run
 
