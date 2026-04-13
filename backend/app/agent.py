@@ -379,6 +379,9 @@ def _summary_from_tool_result(kind: str, result: dict[str, Any]) -> str:
 
         if result.get("status") == "available":
             return f"They have a table for {party_size} at {requested_time}.{suffix}"
+        if result.get("status") == "party_too_large":
+            message = result.get("message") or "That party size is above the restaurant's limit."
+            return f"They cannot seat a party of {party_size}. {message}{suffix}"
         if result.get("alternative_time"):
             return f"They do not have a table for {party_size} at {requested_time}, but {result['alternative_time']} is available.{suffix}"
         return f"They do not have a table for {party_size} at {requested_time}.{suffix}"
@@ -454,10 +457,6 @@ def _is_unsupported(text: str) -> bool:
         return False
     unsupported_words = ["menu", "delivery", "order", "complaint", "review"]
     return any(word in text for word in unsupported_words)
-
-
-def _is_availability_request(text: str) -> bool:
-    return any(word in text for word in ["table", "availability", "available", "avaliable", "seat", "room"])
 
 
 def _is_hours_request(text: str) -> bool:

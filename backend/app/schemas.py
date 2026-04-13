@@ -36,6 +36,7 @@ class ReservationCallResponse(StrictModel):
     """Outcome of a reservation phone attempt."""
 
     confirmed: bool
+    call_state: str
     message: str
     call_id: Optional[str] = None
     call_status: Optional[str] = None

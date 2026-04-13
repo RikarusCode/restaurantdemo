@@ -58,7 +58,6 @@ const STEP_LABELS = {
 
 let restaurants = [];
 let traceVisible = false;
-let lastReservationUi = null;
 
 const restaurantSelect = document.getElementById("restaurant-select");
 const restaurantDetails = document.getElementById("restaurant-details");
@@ -165,29 +164,39 @@ function resetRunState() {
 function clearReservationCta() {
   reservationActions.hidden = true;
   reservationActions.innerHTML = "";
-  lastReservationUi = null;
 }
 
 function syncReservationCta(ui) {
-  if (!ui || !ui.reservation || !ui.reservation.show) {
+  const button = ui?.reservation_button;
+  const modal = ui?.reservation_modal;
+
+  if (!button?.visible) {
     reservationActions.hidden = true;
     reservationActions.innerHTML = "";
-    lastReservationUi = null;
     return;
   }
 
-  lastReservationUi = ui.reservation;
   reservationActions.hidden = false;
-  reservationActions.innerHTML = `<button type="button" class="cta-btn" id="reservation-open">${escapeHtml(ui.reservation.cta_label)}</button>`;
-  document.getElementById("reservation-open").addEventListener("click", () => openReservationModal(ui.reservation));
+  reservationActions.innerHTML = `
+    <button type="button" class="cta-btn" id="reservation-open" ${button.enabled ? "" : "disabled"}>
+      ${escapeHtml(button.label)}
+    </button>
+    ${button.disabled_reason ? `<p class="reservation-note">${escapeHtml(button.disabled_reason)}</p>` : ""}
+  `;
 
-  if (ui.reservation.auto_open_modal) {
-    queueMicrotask(() => openReservationModal(ui.reservation));
+  if (button.enabled) {
+    document.getElementById("reservation-open").addEventListener("click", () => openReservationModal(modal));
+  }
+
+  if (button.enabled && modal?.auto_open) {
+    queueMicrotask(() => openReservationModal(modal));
   }
 }
 
 function openReservationModal(block) {
-  const draft = block.draft;
+  const draft = block?.draft;
+  if (!draft) return;
+
   document.getElementById("rf-restaurant").value = draft.restaurant_name || "";
   document.getElementById("rf-location").value = draft.location || "";
   document.getElementById("rf-date").value = draft.date_heading || "";
@@ -443,6 +452,9 @@ reservationForm.addEventListener("submit", async (event) => {
   };
 
   try {
+    finalAnswer.textContent = "Calling the restaurant...";
+    answerContext.textContent = "The Retell agent is placing the outbound reservation call.";
+
     const response = await fetch(`${API_BASE}/reservation/call`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -456,12 +468,12 @@ reservationForm.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (data.confirmed) {
       finalAnswer.textContent = "Your reservation is confirmed.";
-      answerContext.textContent = data.message;
+      answerContext.textContent = callOutcomeText(data);
       closeReservationModal();
       clearReservationCta();
     } else {
       finalAnswer.textContent = "We could not confirm a reservation on this call.";
-      answerContext.textContent = data.message;
+      answerContext.textContent = callOutcomeText(data);
       closeReservationModal();
     }
   } catch (error) {
@@ -474,6 +486,14 @@ reservationForm.addEventListener("submit", async (event) => {
     spinner.hidden = true;
   }
 });
+
+function callOutcomeText(data) {
+  const parts = [data.message];
+  if (data.call_state) parts.push(`State: ${data.call_state}`);
+  if (data.call_status) parts.push(`Retell status: ${data.call_status}`);
+  if (data.call_id) parts.push(`Call ID: ${data.call_id}`);
+  return parts.filter(Boolean).join(" ");
+}
 
 loadRestaurants();
 syncTraceVisibility();

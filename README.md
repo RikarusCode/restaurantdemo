@@ -1,52 +1,64 @@
 # TableCall
 
-TableCall is a small full-stack demo for restaurant discovery, deterministic availability, open-hours checks, and an optional **phone reservation handoff** powered by [Retell AI](https://retellai.com). You type a single natural-language request; the backend runs a short agent loop (LLM planning when configured, otherwise a local parser), executes structured tools against a local restaurant directory, streams a transparent trace to the browser, and returns **both** a spoken-style answer and **explicit UI state** for the reservation funnel.
+TableCall is a small full-stack demo for restaurant discovery, deterministic availability, open-hours checks, and an optional phone reservation handoff powered by [Retell AI](https://retellai.com). A user types one natural-language request; the backend runs a short agent loop, executes structured tools against a local restaurant directory, streams a visible trace, and returns an answer plus explicit UI state for the reservation funnel.
 
-## What you can do
+## What You Can Do
 
-- **Ask for a table** using everyday language, including “make a reservation” or “book a table,” with party size, date, and time.
-- **Ask whether a place is open** now or at a specific time.
-- **Auto-detect the restaurant** from cuisine, neighborhood, nicknames (“the sushi place”), or proper names.
-- When availability is evaluated, the UI may offer **Place reservation?** or **Attempt reservation anyway** (for slots the mock data marks as full or constrained). Opening the modal shows restaurant, location, day/date, time, and party size prefilled from the request.
-- **Attempt reservation** starts a **real outbound call** through Retell to the restaurant’s directory number, or to a **test destination** you configure, while injecting reservation details as Retell dynamic variables for your voice agent.
+- Ask for a table with everyday language, including "make a reservation" or "book a table", when party size, date, and time are known.
+- Ask whether a place is open now or at a specific time.
+- Auto-detect the restaurant from cuisine, neighborhood, nicknames like "the sushi place", or proper names.
+- Render a normal availability answer, a reservation button, an optional reservation modal, a calling state, and a final success or failure answer after the call.
+- Place a real outbound reservation attempt through Retell when credentials are configured.
 
-The mock restaurant directory is intentionally deterministic so traces stay reproducible. The telephony path is real: you provide Retell credentials, a Retell-owned `from` number, and (recommended) `TABLECALL_DIAL_OVERRIDE` during development so every restaurant routes to a handset you control.
+The restaurant data is deterministic so demos stay reproducible. The Retell call is real. During development, route calls to your own phone with `TABLECALL_DIAL_OVERRIDE` instead of dialing the fixture restaurant numbers.
 
-## How it works
+## How It Works
 
 ```text
-Browser  -> POST /agent/run (NDJSON stream of pipeline steps)
-       LLM or local parser selects tools
-       -> search_restaurant (when no restaurant is pinned)
-       -> call_restaurant_check_availability / call_restaurant_check_hours
-       -> summary step includes { text, ui } for availability
-  -> POST /reservation/call (JSON) when the user confirms the modal
-       Retell service places outbound call, polls until terminal status
-       -> response { confirmed, message, call_id, call_status }
+Browser -> POST /agent/run
+  -> LLM planner or deterministic parser
+  -> search_restaurant when no restaurant is selected
+  -> call_restaurant_check_availability or call_restaurant_check_hours
+  -> summary { text, ui }
+
+Browser -> POST /reservation/call after modal confirmation
+  -> Retell outbound call
+  -> poll until terminal status
+  -> { confirmed, call_state, message, call_id, call_status }
 ```
 
-Backend highlights:
+The reservation UI state is intentionally explicit:
 
-| Module | Role |
-| --- | --- |
-| `backend/app/main.py` | FastAPI app, static frontend, `/agent/run`, `/reservation/call`, `/api/restaurants` |
-| `backend/app/agent.py` | Planner loop, guardrails, summaries |
-| `backend/app/tools.py` | Tool definitions and deterministic execution |
-| `backend/app/mock_data.py` | Restaurants, hours, availability grid |
-| `backend/app/reservation_ui.py` | Reservation funnel UI payload attached to availability summaries |
-| `backend/app/retell_service.py` | Isolated Retell client: dial, poll, interpret post-call analysis |
-| `backend/app/phone_format.py` | E.164 normalization for telephony |
-
-## Restaurant directory
-
-Four demo venues ship with rich hours, capacity rules, and availability slots. Phone numbers are stored in **E.164** (for example `+14155550142`). For live testing, set `TABLECALL_DIAL_OVERRIDE` so outbound calls always reach your own number while the UI still shows the fictional directory entry.
-
-| Restaurant | Style | Example aliases |
-| --- | --- | --- |
-| Kazu Sushi | Japanese sushi bar | sushi place, japanese place |
-| Luna Trattoria | Italian trattoria | italian place, pasta place |
-| Harbor Garden | Waterfront seafood | seafood place, waterfront place |
-| Nopalito Verde | Plant-forward Mexican | taco place, mexican place |
+```json
+{
+  "availability": {
+    "status": "available",
+    "available": true,
+    "alternative_time": null,
+    "party_size": 2,
+    "requested_time": "6:00 PM"
+  },
+  "reservation_button": {
+    "visible": true,
+    "enabled": true,
+    "label": "Place reservation?",
+    "disabled_reason": null
+  },
+  "reservation_modal": {
+    "auto_open": true,
+    "draft": {
+      "restaurant_name": "Kazu Sushi",
+      "restaurant_phone": "+14155550142",
+      "location": "214 Linden Street, San Francisco, CA",
+      "date_heading": "Tonight - Monday, Apr 13, 2026",
+      "requested_date": "tonight",
+      "time": "6:00 PM",
+      "party_size": 2,
+      "availability_status": "available"
+    }
+  }
+}
+```
 
 ## Setup
 
@@ -61,7 +73,7 @@ cd ..
 copy .env.example .env
 ```
 
-Configure an LLM provider (optional but recommended for semantic restaurant search):
+Configure an LLM provider if you want LLM planning and semantic restaurant search:
 
 ```text
 LAVA_API_BASE_URL=https://api.lava.so/v1
@@ -69,21 +81,46 @@ LAVA_SECRET_KEY=your-key-here
 LAVA_MODEL=gpt-4.1-mini
 ```
 
-Other providers supported in `.env.example` include K2 Think and OpenAI-compatible APIs. With no key, the deterministic parser still resolves many requests.
+With no LLM key, the deterministic parser still handles the core examples.
 
-### Retell AI
+## Retell Setup
 
-Add to `.env`:
+Put these values in `.env`:
 
 ```text
-RETELL_API_KEY=...
-RETELL_FROM_NUMBER=+1your-retell-number
-# Optional
-RETELL_AGENT_ID=...
-TABLECALL_DIAL_OVERRIDE=+1your-test-handset
+RETELL_API_KEY=your-retell-api-key
+RETELL_FROM_NUMBER=+1your-retell-owned-number
+RETELL_AGENT_ID=optional-agent-id
+TABLECALL_DIAL_OVERRIDE=+1your-personal-test-phone
 ```
 
-Point your Retell agent’s prompt or knowledge base at the dynamic variables TableCall sends (`restaurant_name`, `party_size`, `reservation_time`, `reservation_date`, `location`, `notes`, `requested_date_token`). For reliable **confirmed / not confirmed** signaling in the API response, add a **boolean post-call analysis field** named `reservation_confirmed` on the agent. If that field is absent, TableCall falls back to Retell’s `call_successful` flag (and voicemail detection) so the demo still returns an outcome.
+Where your phone number goes:
+
+- `RETELL_FROM_NUMBER` is the caller ID you own in Retell. Copy this from the Retell phone-number page. It must be E.164, for example `+14157774444`.
+- `TABLECALL_DIAL_OVERRIDE` is your personal test handset. Set this while demoing so every restaurant call goes to you. This is the safest place for your real phone number.
+- Restaurant directory numbers live in [backend/app/mock_data.py](backend/app/mock_data.py). Leave those as fixture numbers unless you intentionally want to change the demo directory.
+
+What to do on the Retell website:
+
+1. Create or choose a phone number in Retell. Copy it into `RETELL_FROM_NUMBER`.
+2. Create a voice agent that can call a restaurant host and ask for a reservation using the dynamic variables below.
+3. Copy the Retell API key into `RETELL_API_KEY`.
+4. Optional: copy the agent ID into `RETELL_AGENT_ID` if you want this app to force one specific agent.
+5. Add a boolean post-call analysis field named `reservation_confirmed`. TableCall uses it as the clean success/failure signal.
+
+Dynamic variables sent to Retell:
+
+```text
+restaurant_name
+party_size
+reservation_time
+reservation_date
+requested_date_token
+location
+notes
+```
+
+If `reservation_confirmed` is missing, TableCall falls back to Retell's `call_successful` and voicemail flags. That works for a demo, but the explicit boolean is much clearer.
 
 ## Run
 
@@ -91,14 +128,40 @@ Point your Retell agent’s prompt or knowledge base at the dynamic variables Ta
 py -m uvicorn backend.app.main:app --reload
 ```
 
-Open `http://localhost:8000`.
+Open:
 
-## Product boundaries
+```text
+http://localhost:8000
+```
 
-TableCall is a demo: availability comes from local fixtures, not live POS systems. The reservation path places a real phone call through your Retell account; compliance, recording consent, and production guardrails are your responsibility. Unsupported example intents in the UI include off-scope requests such as delivery ordering.
+## Examples And Demos
 
-## Future ideas
+Use examples in three layers:
 
-- Automated tests for the planner contract, parser, and availability edge cases.
-- Swap the directory for a real Places or reservations provider behind the same tool boundary.
-- Webhook-driven Retell completion instead of polling for very long calls.
+- Frontend example buttons: best for live demos because they show the normal answer, trace, reservation button, modal, calling state, and final replacement answer.
+- [demo/DEMO_TEST_CASES.md](demo/DEMO_TEST_CASES.md): best for a manual checklist before recording or presenting.
+- [demo/demo_cases.json](demo/demo_cases.json): best as a stable source for future automated smoke tests.
+
+Recommended live demo flow:
+
+1. Auto-detect: `Can you check whether the sushi place has a table for 2 tonight at 6?`
+2. Reservation intent: `Make a reservation for 2 tonight at 6 at the sushi place.`
+3. Unavailable but callable: `Can you ask this restaurant about a table for 2 tonight at 7 PM?`
+4. Clarification: `Can you check whether this restaurant has room for 4?`
+5. Unsupported scope: `Can you order delivery from this restaurant?`
+
+## Project Map
+
+| Module | Role |
+| --- | --- |
+| `backend/app/main.py` | FastAPI app, static frontend, `/agent/run`, `/reservation/call`, `/api/restaurants` |
+| `backend/app/agent.py` | Planner loop, guardrails, summaries |
+| `backend/app/tools.py` | Tool definitions and deterministic execution |
+| `backend/app/mock_data.py` | Restaurants, hours, availability grid |
+| `backend/app/reservation_ui.py` | Availability, reservation button, and modal UI state |
+| `backend/app/retell_service.py` | Retell dial, polling, and call outcome interpretation |
+| `frontend/app.js` | Browser rendering, modal behavior, call lifecycle rendering |
+
+## Product Boundaries
+
+Availability comes from local fixtures, not live reservation systems. The reservation path places a real phone call through your Retell account. Compliance, consent, recording policy, and production guardrails are your responsibility.

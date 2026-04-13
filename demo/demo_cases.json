@@ -73,10 +73,10 @@
   },
   {
     "id": "TC-10",
-    "title": "Unsupported booking request",
+    "title": "Unsupported delivery request",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
-    "user_request": "Can you book a table for me at this restaurant?",
+    "user_request": "Can you order delivery from this restaurant?",
     "expected_summary_contains": "supports table availability and open-status checks only"
   },
   {
@@ -86,5 +86,21 @@
     "restaurant_phone": null,
     "user_request": "Can you check whether Blue Comet Bistro is open right now?",
     "expected_summary_contains": "Please specify which restaurant"
+  },
+  {
+    "id": "TC-12",
+    "title": "Reservation intent opens modal",
+    "restaurant_name": null,
+    "restaurant_phone": null,
+    "user_request": "Make a reservation for 2 tonight at 6 at the sushi place.",
+    "expected_summary_contains": "They have a table for 2 at 6:00 PM."
+  },
+  {
+    "id": "TC-13",
+    "title": "Party too large disables reservation call",
+    "restaurant_name": "Kazu Sushi",
+    "restaurant_phone": "415-555-0142",
+    "user_request": "Can you check whether this restaurant has a table for 9 tonight at 6?",
+    "expected_summary_contains": "They cannot seat a party of 9."
   }
 ]

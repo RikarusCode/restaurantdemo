@@ -18,6 +18,7 @@ class ReservationCallOutcome:
 
     ok: bool
     confirmed: bool
+    call_state: str
     message: str
     call_id: str | None = None
     raw_status: str | None = None
@@ -89,12 +90,14 @@ def place_reservation_call(
         return ReservationCallOutcome(
             ok=False,
             confirmed=False,
+            call_state="not_configured",
             message="Retell is not configured. Set RETELL_API_KEY and RETELL_FROM_NUMBER in .env.",
         )
     if not settings.retell_from_number:
         return ReservationCallOutcome(
             ok=False,
             confirmed=False,
+            call_state="not_configured",
             message="RETELL_FROM_NUMBER is missing. Add your Retell-owned caller ID.",
         )
 
@@ -129,6 +132,7 @@ def place_reservation_call(
         return ReservationCallOutcome(
             ok=False,
             confirmed=False,
+            call_state="start_failed",
             message=f"Could not start the Retell call: {exc.__class__.__name__}: {exc}",
         )
 
@@ -137,6 +141,7 @@ def place_reservation_call(
         return ReservationCallOutcome(
             ok=False,
             confirmed=False,
+            call_state="start_failed",
             message="Retell did not return a call id.",
         )
 
@@ -150,6 +155,7 @@ def place_reservation_call(
             return ReservationCallOutcome(
                 ok=False,
                 confirmed=False,
+                call_state="poll_failed",
                 message=f"Lost contact with Retell while polling the call: {exc.__class__.__name__}: {exc}",
                 call_id=call_id,
                 raw_status=last_status,
@@ -169,6 +175,7 @@ def place_reservation_call(
             return ReservationCallOutcome(
                 ok=ok,
                 confirmed=confirmed and ok,
+                call_state="completed" if ok else "failed",
                 message=msg,
                 call_id=call_id,
                 raw_status=current.call_status,
@@ -179,6 +186,7 @@ def place_reservation_call(
     return ReservationCallOutcome(
         ok=False,
         confirmed=False,
+        call_state="timed_out",
         message="Timed out waiting for the call to finish.",
         call_id=call_id,
         raw_status=last_status,

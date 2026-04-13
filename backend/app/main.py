@@ -49,6 +49,7 @@ def reservation_call_endpoint(request: ReservationCallRequest) -> ReservationCal
     )
     return ReservationCallResponse(
         confirmed=outcome.confirmed,
+        call_state=outcome.call_state,
         message=outcome.message,
         call_id=outcome.call_id,
         call_status=outcome.raw_status,
