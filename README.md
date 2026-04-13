@@ -1,75 +1,52 @@
-# TableCall Restaurant Agent
+# TableCall
 
-TableCall is a local web app for checking restaurant availability and hours through an agentic call flow. A user asks in natural language, the LLM chooses the appropriate tool, the backend executes a deterministic restaurant-call action against local restaurant data, and the app returns a concise answer with an integrated trace of the loop.
+TableCall is a small full-stack demo for restaurant discovery, deterministic availability, open-hours checks, and an optional **phone reservation handoff** powered by [Retell AI](https://retellai.com). You type a single natural-language request; the backend runs a short agent loop (LLM planning when configured, otherwise a local parser), executes structured tools against a local restaurant directory, streams a transparent trace to the browser, and returns **both** a spoken-style answer and **explicit UI state** for the reservation funnel.
 
-The main product path assumes a restaurant is already selected by the system. Auto-detect mode extends that flow by resolving restaurants from phrases like "the sushi place", "the taco place", or "the waterfront place" before checking availability or hours.
+## What you can do
 
-## Capabilities
+- **Ask for a table** using everyday language, including “make a reservation” or “book a table,” with party size, date, and time.
+- **Ask whether a place is open** now or at a specific time.
+- **Auto-detect the restaurant** from cuisine, neighborhood, nicknames (“the sushi place”), or proper names.
+- When availability is evaluated, the UI may offer **Place reservation?** or **Attempt reservation anyway** (for slots the mock data marks as full or constrained). Opening the modal shows restaurant, location, day/date, time, and party size prefilled from the request.
+- **Attempt reservation** starts a **real outbound call** through Retell to the restaurant’s directory number, or to a **test destination** you configure, while injecting reservation details as Retell dynamic variables for your voice agent.
 
-- Check table availability by party size, date, and time.
-- Check whether a restaurant is open now or at a specified time.
-- Resolve restaurants by name, cuisine, neighborhood, style, or alias.
-- Show the LLM planning step, selected tool, tool execution, and tool result.
-- Use a deterministic fallback parser if an LLM provider is unavailable.
-- Serve the polished frontend and FastAPI backend from one local command.
+The mock restaurant directory is intentionally deterministic so traces stay reproducible. The telephony path is real: you provide Retell credentials, a Retell-owned `from` number, and (recommended) `TABLECALL_DIAL_OVERRIDE` during development so every restaurant routes to a handset you control.
 
-## Agent Flow
+## How it works
 
 ```text
-User request
-  -> LLM planning
-  -> LLM-selected tool
-  -> local restaurant data/tool execution
-  -> concise answer
-  -> visible trace for transparency
+Browser  -> POST /agent/run (NDJSON stream of pipeline steps)
+       LLM or local parser selects tools
+       -> search_restaurant (when no restaurant is pinned)
+       -> call_restaurant_check_availability / call_restaurant_check_hours
+       -> summary step includes { text, ui } for availability
+  -> POST /reservation/call (JSON) when the user confirms the modal
+       Retell service places outbound call, polls until terminal status
+       -> response { confirmed, message, call_id, call_status }
 ```
 
-For provider compatibility and reliability, the LLM is responsible for planning and tool selection. The backend owns tool execution and final deterministic formatting, which keeps the product snappy and prevents the model from inventing restaurant facts.
+Backend highlights:
 
-## Example Use Cases
-
-| Request | Expected behavior |
+| Module | Role |
 | --- | --- |
-| `Can you check whether the sushi place has a table for 2 tonight at 6?` | Resolves Kazu Sushi by alias and checks availability at 6:00 PM. |
-| `Can you ask this restaurant about a table for 2 tonight at 7 PM?` | Uses the selected restaurant and returns the nearest available time if 7 PM is booked. |
-| `Can you check whether the taco place has room for 6 around 6?` | Resolves Nopalito Verde and checks availability for 6 guests at 6:00 PM. |
-| `Can you check whether this restaurant is open right now?` | Calls the hours tool for the selected restaurant. |
-| `Can you check whether Kazu Sushi is open tomorrow at noon?` | Resolves Kazu Sushi and checks open status at tomorrow noon. |
-| `Can you check whether this restaurant has room for 4?` | Recognizes an availability request but asks for the missing time. |
-| `Can you book a table for me at this restaurant?` | Explains that booking is outside the supported product scope. |
+| `backend/app/main.py` | FastAPI app, static frontend, `/agent/run`, `/reservation/call`, `/api/restaurants` |
+| `backend/app/agent.py` | Planner loop, guardrails, summaries |
+| `backend/app/tools.py` | Tool definitions and deterministic execution |
+| `backend/app/mock_data.py` | Restaurants, hours, availability grid |
+| `backend/app/reservation_ui.py` | Reservation funnel UI payload attached to availability summaries |
+| `backend/app/retell_service.py` | Isolated Retell client: dial, poll, interpret post-call analysis |
+| `backend/app/phone_format.py` | E.164 normalization for telephony |
 
-## Restaurant Data
+## Restaurant directory
 
-The local directory contains four restaurants with diverse operating data:
+Four demo venues ship with rich hours, capacity rules, and availability slots. Phone numbers are stored in **E.164** (for example `+14155550142`). For live testing, set `TABLECALL_DIAL_OVERRIDE` so outbound calls always reach your own number while the UI still shows the fictional directory entry.
 
-| Restaurant | Type | Search aliases |
+| Restaurant | Style | Example aliases |
 | --- | --- | --- |
-| Kazu Sushi | Japanese sushi bar | `sushi place`, `japanese place`, `sushi spot` |
-| Luna Trattoria | Italian trattoria | `italian place`, `pasta place`, `trattoria` |
-| Harbor Garden | Waterfront seafood | `seafood place`, `fish place`, `waterfront place` |
-| Nopalito Verde | Plant-forward Mexican cantina | `taco place`, `mexican place`, `vegetarian place` |
-
-Each restaurant includes:
-
-- weekly hours
-- capacity and maximum party size
-- reservation policy
-- lunch, dinner, and tomorrow availability slots
-- party-size constraints
-- unavailable slots and alternative-time behavior
-
-## Architecture
-
-| File | Purpose |
-| --- | --- |
-| `backend/app/main.py` | FastAPI app, static frontend serving, streamed `/agent/run` endpoint |
-| `backend/app/agent.py` | LLM planner, local fallback parser, visible agent-loop orchestration |
-| `backend/app/tools.py` | OpenAI-compatible tool definitions and deterministic tool execution |
-| `backend/app/mock_data.py` | Restaurant directory, hours, availability, search aliases, and availability helpers |
-| `backend/app/restaurant_search.py` | Restaurant search and public restaurant serialization |
-| `backend/app/schemas.py` | Pydantic API and trace models |
-| `backend/app/config.py` | Provider configuration for Lava, K2, and OpenAI-compatible APIs |
-| `frontend/` | Product UI with request entry, answer card, trace panel, and data table |
+| Kazu Sushi | Japanese sushi bar | sushi place, japanese place |
+| Luna Trattoria | Italian trattoria | italian place, pasta place |
+| Harbor Garden | Waterfront seafood | seafood place, waterfront place |
+| Nopalito Verde | Plant-forward Mexican | taco place, mexican place |
 
 ## Setup
 
@@ -84,7 +61,7 @@ cd ..
 copy .env.example .env
 ```
 
-Configure one LLM provider in `.env`. Lava is preferred when present:
+Configure an LLM provider (optional but recommended for semantic restaurant search):
 
 ```text
 LAVA_API_BASE_URL=https://api.lava.so/v1
@@ -92,40 +69,36 @@ LAVA_SECRET_KEY=your-key-here
 LAVA_MODEL=gpt-4.1-mini
 ```
 
-K2 and standard OpenAI-compatible credentials are also supported:
+Other providers supported in `.env.example` include K2 Think and OpenAI-compatible APIs. With no key, the deterministic parser still resolves many requests.
+
+### Retell AI
+
+Add to `.env`:
 
 ```text
-K2_BASE_URL=https://api.k2think.ai/v1
-K2_API_KEY=your-key-here
-K2_MODEL=MBZUAI-IFM/K2-Think-v2
-
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4.1-mini
+RETELL_API_KEY=...
+RETELL_FROM_NUMBER=+1your-retell-number
+# Optional
+RETELL_AGENT_ID=...
+TABLECALL_DIAL_OVERRIDE=+1your-test-handset
 ```
 
-If no provider key is configured, TableCall still runs with the deterministic local parser.
+Point your Retell agent’s prompt or knowledge base at the dynamic variables TableCall sends (`restaurant_name`, `party_size`, `reservation_time`, `reservation_date`, `location`, `notes`, `requested_date_token`). For reliable **confirmed / not confirmed** signaling in the API response, add a **boolean post-call analysis field** named `reservation_confirmed` on the agent. If that field is absent, TableCall falls back to Retell’s `call_successful` flag (and voicemail detection) so the demo still returns an outcome.
 
 ## Run
-
-From the repository root:
 
 ```powershell
 py -m uvicorn backend.app.main:app --reload
 ```
 
-Open:
+Open `http://localhost:8000`.
 
-```text
-http://localhost:8000
-```
+## Product boundaries
 
-## Product Boundaries
+TableCall is a demo: availability comes from local fixtures, not live POS systems. The reservation path places a real phone call through your Retell account; compliance, recording consent, and production guardrails are your responsibility. Unsupported example intents in the UI include off-scope requests such as delivery ordering.
 
-TableCall supports availability and open-status checks. It does not place real reservations, call live phone numbers, scrape restaurant websites, or process menu/order requests. The restaurant-call action is intentionally local and deterministic so the agent loop can be evaluated reliably and extended later with a real calling or reservation provider.
+## Future ideas
 
-## Future Improvements
-
-- Add automated tests for the LLM planner contract, fallback parser, and availability edge cases.
-- Replace the local restaurant directory with a real Places provider behind the existing search boundary.
-- Add a real telephony or reservation integration behind the existing tool executor.
-- Add observability around provider latency, fallback rate, and tool outcomes.
+- Automated tests for the planner contract, parser, and availability edge cases.
+- Swap the directory for a real Places or reservations provider behind the same tool boundary.
+- Webhook-driven Retell completion instead of polling for very long calls.

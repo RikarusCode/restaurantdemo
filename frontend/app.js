@@ -31,9 +31,14 @@ const EXAMPLES = {
     request: "Can you check whether this restaurant has room for 4?",
     search: false,
   },
+  reservation: {
+    restaurant: null,
+    request: "Make a reservation for 2 tonight at 6 at the sushi place.",
+    search: true,
+  },
   unsupported: {
     restaurant: "Kazu Sushi",
-    request: "Can you book a table for me at this restaurant?",
+    request: "Can you order delivery from this restaurant?",
     search: false,
   },
 };
@@ -53,6 +58,7 @@ const STEP_LABELS = {
 
 let restaurants = [];
 let traceVisible = false;
+let lastReservationUi = null;
 
 const restaurantSelect = document.getElementById("restaurant-select");
 const restaurantDetails = document.getElementById("restaurant-details");
@@ -66,6 +72,9 @@ const runStatus = document.getElementById("run-status");
 const finalAnswer = document.getElementById("final-answer");
 const answerContext = document.getElementById("answer-context");
 const traceToggle = document.getElementById("trace-toggle");
+const reservationActions = document.getElementById("reservation-actions");
+const reservationModal = document.getElementById("reservation-modal");
+const reservationForm = document.getElementById("reservation-form");
 
 async function loadRestaurants() {
   try {
@@ -150,6 +159,48 @@ function resetRunState() {
   pipeline.innerHTML = "";
   finalAnswer.textContent = "Checking...";
   answerContext.textContent = "The agent is planning the request and selecting the next tool.";
+  clearReservationCta();
+}
+
+function clearReservationCta() {
+  reservationActions.hidden = true;
+  reservationActions.innerHTML = "";
+  lastReservationUi = null;
+}
+
+function syncReservationCta(ui) {
+  if (!ui || !ui.reservation || !ui.reservation.show) {
+    reservationActions.hidden = true;
+    reservationActions.innerHTML = "";
+    lastReservationUi = null;
+    return;
+  }
+
+  lastReservationUi = ui.reservation;
+  reservationActions.hidden = false;
+  reservationActions.innerHTML = `<button type="button" class="cta-btn" id="reservation-open">${escapeHtml(ui.reservation.cta_label)}</button>`;
+  document.getElementById("reservation-open").addEventListener("click", () => openReservationModal(ui.reservation));
+
+  if (ui.reservation.auto_open_modal) {
+    queueMicrotask(() => openReservationModal(ui.reservation));
+  }
+}
+
+function openReservationModal(block) {
+  const draft = block.draft;
+  document.getElementById("rf-restaurant").value = draft.restaurant_name || "";
+  document.getElementById("rf-location").value = draft.location || "";
+  document.getElementById("rf-date").value = draft.date_heading || "";
+  document.getElementById("rf-time").value = draft.time || "";
+  document.getElementById("rf-party").value = draft.party_size ?? 2;
+  document.getElementById("rf-phone").value = draft.restaurant_phone || "";
+  document.getElementById("rf-date-token").value = draft.requested_date || "";
+  document.getElementById("rf-notes").value = "";
+  reservationModal.hidden = false;
+}
+
+function closeReservationModal() {
+  reservationModal.hidden = true;
 }
 
 function syncTraceVisibility() {
@@ -162,6 +213,7 @@ function renderStep(step, index) {
   if (step.step === "summary") {
     finalAnswer.textContent = step.data.text;
     answerContext.textContent = "Resolved through the agent planner and restaurant tool.";
+    syncReservationCta(step.data.ui);
   }
 
   const element = document.createElement("article");
@@ -248,6 +300,7 @@ function renderUnderstanding(data) {
 }
 
 function renderError(message) {
+  clearReservationCta();
   finalAnswer.textContent = "The local service is unavailable.";
   answerContext.textContent = message;
   pipeline.innerHTML = `
@@ -362,6 +415,64 @@ document.querySelectorAll("[data-example]").forEach((button) => {
 
     form.requestSubmit();
   });
+});
+
+reservationModal.querySelectorAll("[data-close-modal]").forEach((el) => {
+  el.addEventListener("click", closeReservationModal);
+});
+
+reservationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitBtn = document.getElementById("rf-submit");
+  const label = submitBtn.querySelector(".btn-label");
+  const spinner = submitBtn.querySelector(".spinner");
+
+  label.textContent = "Calling...";
+  submitBtn.disabled = true;
+  spinner.hidden = false;
+
+  const payload = {
+    restaurant_name: document.getElementById("rf-restaurant").value.trim(),
+    restaurant_phone: document.getElementById("rf-phone").value.trim(),
+    location: document.getElementById("rf-location").value.trim() || null,
+    party_size: Number(document.getElementById("rf-party").value),
+    requested_time: document.getElementById("rf-time").value.trim(),
+    date_heading: document.getElementById("rf-date").value.trim(),
+    requested_date_token: document.getElementById("rf-date-token").value.trim() || null,
+    notes: document.getElementById("rf-notes").value.trim() || null,
+  };
+
+  try {
+    const response = await fetch(`${API_BASE}/reservation/call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}.`);
+    }
+
+    const data = await response.json();
+    if (data.confirmed) {
+      finalAnswer.textContent = "Your reservation is confirmed.";
+      answerContext.textContent = data.message;
+      closeReservationModal();
+      clearReservationCta();
+    } else {
+      finalAnswer.textContent = "We could not confirm a reservation on this call.";
+      answerContext.textContent = data.message;
+      closeReservationModal();
+    }
+  } catch (error) {
+    finalAnswer.textContent = "We could not complete the reservation call.";
+    answerContext.textContent = error.message;
+    closeReservationModal();
+  } finally {
+    label.textContent = "Attempt reservation";
+    submitBtn.disabled = false;
+    spinner.hidden = true;
+  }
 });
 
 loadRestaurants();

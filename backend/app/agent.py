@@ -10,6 +10,7 @@ from openai import OpenAI
 
 from .config import settings
 from .mock_data import normalize_time
+from .reservation_ui import implies_availability_check, merge_summary_with_reservation_ui
 from .tools import SEARCH_TOOL_DEFINITION, TOOL_DEFINITIONS, TOOL_DISPLAY_NAMES, execute_tool
 
 Step = dict[str, Any]
@@ -29,7 +30,8 @@ Name: {restaurant_name}
 Phone: {restaurant_phone}
 
 Your job is to choose the correct tool for the user's request. Supported tasks:
-- Check table availability for a party size, date, and time.
+- Check table availability for a party size, date, and time (including phrases like
+  "make a reservation" or "book a table" that imply an availability check).
 - Check whether the restaurant is open now or at a specified time.
 
 For availability, assume 2 guests when party size is missing, assume tonight
@@ -54,6 +56,8 @@ as "the sushi place", "the Italian place", "the waterfront place", or
 After the restaurant is resolved, the backend will continue the agent loop
 against that restaurant. If no restaurant clue exists, ask the user to specify
 which restaurant to call.
+Reservation language (book a table, make a reservation) should still use the
+availability tool once a restaurant is known.
 Do not ask the user to confirm an inferred restaurant. Use search_restaurant
 when a supported request includes a plausible restaurant clue.
 """
@@ -75,7 +79,7 @@ def run_agent(
             {"name": restaurant_name, "phone": restaurant_phone, "source": "selected_by_system"},
         )
 
-    if _is_availability_request(text) and not _extract_time(text):
+    if implies_availability_check(text) and not _extract_time(text):
         yield _step(
             "understanding",
             "Request Needs Time",
@@ -225,7 +229,15 @@ def _run_with_llm(
         yield from _run_with_llm(user_request, restaurant_name, restaurant_phone)
         return
 
-    yield _step("summary", "Final Answer", {"text": _summary_from_tool_result(_tool_result_kind(tool_name), result)})
+    kind = _tool_result_kind(tool_name)
+    if kind == "availability":
+        yield _step(
+            "summary",
+            "Final Answer",
+            merge_summary_with_reservation_ui(_summary_from_tool_result(kind, result), user_request, result),
+        )
+    else:
+        yield _step("summary", "Final Answer", {"text": _summary_from_tool_result(kind, result)})
 
 
 def _run_without_llm(
@@ -275,7 +287,7 @@ def _run_without_llm(
             },
         )
 
-    if _is_availability_request(text):
+    if implies_availability_check(text):
         yield from _fallback_availability(text, restaurant_name, restaurant_phone)
         return
 
@@ -324,7 +336,11 @@ def _fallback_availability(
     )
     result = execute_tool("call_restaurant_check_availability", args, name, phone)
     yield _step("tool_result", "Restaurant Response", result)
-    yield _step("summary", "Final Answer", {"text": _summary_from_tool_result("availability", result)})
+    yield _step(
+        "summary",
+        "Final Answer",
+        merge_summary_with_reservation_ui(_summary_from_tool_result("availability", result), text, result),
+    )
 
 
 def _fallback_hours(
@@ -434,7 +450,9 @@ def _extract_time(text: str) -> str | None:
 
 
 def _is_unsupported(text: str) -> bool:
-    unsupported_words = ["book", "reserve", "reservation", "menu", "delivery", "order", "complaint", "review"]
+    if implies_availability_check(text):
+        return False
+    unsupported_words = ["menu", "delivery", "order", "complaint", "review"]
     return any(word in text for word in unsupported_words)
 
 
@@ -450,7 +468,7 @@ def _should_force_tool_path(user_request: str) -> bool:
     text = user_request.lower()
     if _is_unsupported(text):
         return False
-    return _is_availability_request(text) or _is_hours_request(text)
+    return implies_availability_check(text) or _is_hours_request(text)
 
 
 def _clean_summary(text: str | None) -> str:

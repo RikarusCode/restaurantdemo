@@ -25,7 +25,7 @@ LUNCH_TIMES = ["11:30 AM", "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 P
 RESTAURANTS: list[Restaurant] = [
     {
         "name": "Kazu Sushi",
-        "phone": "415-555-0142",
+        "phone": "+14155550142",
         "cuisine": "Japanese",
         "style": "sushi bar",
         "price_range": "$$",
@@ -78,7 +78,7 @@ RESTAURANTS: list[Restaurant] = [
     },
     {
         "name": "Luna Trattoria",
-        "phone": "415-555-0188",
+        "phone": "+14155550188",
         "cuisine": "Italian",
         "style": "trattoria",
         "price_range": "$$",
@@ -122,7 +122,7 @@ RESTAURANTS: list[Restaurant] = [
     },
     {
         "name": "Harbor Garden",
-        "phone": "415-555-0119",
+        "phone": "+14155550119",
         "cuisine": "Seafood",
         "style": "waterfront seafood",
         "price_range": "$$$",
@@ -173,7 +173,7 @@ RESTAURANTS: list[Restaurant] = [
     },
     {
         "name": "Nopalito Verde",
-        "phone": "415-555-0167",
+        "phone": "+14155550167",
         "cuisine": "Mexican",
         "style": "plant-forward cantina",
         "price_range": "$$",

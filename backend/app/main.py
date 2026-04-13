@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from .agent import run_agent
 from .mock_data import RESTAURANTS
 from .restaurant_search import public_restaurant
-from .schemas import AgentRequest
+from .retell_service import place_reservation_call
+from .schemas import AgentRequest, ReservationCallRequest, ReservationCallResponse
 
 app = FastAPI(title="TableCall Restaurant Agent")
 
@@ -30,6 +31,28 @@ def list_restaurants() -> list[dict]:
     """Expose restaurants so the frontend can populate the selector."""
 
     return [public_restaurant(restaurant) for restaurant in RESTAURANTS]
+
+
+@app.post("/reservation/call", response_model=ReservationCallResponse)
+def reservation_call_endpoint(request: ReservationCallRequest) -> ReservationCallResponse:
+    """Place an outbound reservation attempt through Retell and wait for a terminal call status."""
+
+    outcome = place_reservation_call(
+        restaurant_name=request.restaurant_name,
+        restaurant_phone=request.restaurant_phone,
+        location=request.location,
+        party_size=request.party_size,
+        requested_time=request.requested_time,
+        date_heading=request.date_heading,
+        requested_date_token=request.requested_date_token,
+        notes=request.notes,
+    )
+    return ReservationCallResponse(
+        confirmed=outcome.confirmed,
+        message=outcome.message,
+        call_id=outcome.call_id,
+        call_status=outcome.raw_status,
+    )
 
 
 @app.post("/agent/run")

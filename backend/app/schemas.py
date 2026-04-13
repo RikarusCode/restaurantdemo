@@ -19,6 +19,28 @@ class AgentRequest(StrictModel):
     restaurant_phone: Optional[str] = None
 
 
+class ReservationCallRequest(StrictModel):
+    """Start a Retell outbound call with the reservation details shown in the modal."""
+
+    restaurant_name: str = Field(..., min_length=1)
+    restaurant_phone: str = Field(..., min_length=1)
+    location: Optional[str] = None
+    party_size: int = Field(..., ge=1, le=99)
+    requested_time: str = Field(..., min_length=1)
+    date_heading: str = Field(..., min_length=1)
+    requested_date_token: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ReservationCallResponse(StrictModel):
+    """Outcome of a reservation phone attempt."""
+
+    confirmed: bool
+    message: str
+    call_id: Optional[str] = None
+    call_status: Optional[str] = None
+
+
 class PipelineStep(StrictModel):
     """One visible step in the streamed agent pipeline."""
 

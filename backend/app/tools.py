@@ -15,7 +15,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "call_restaurant_check_availability",
         "description": (
             "Simulate calling the selected restaurant to ask whether a table is "
-            "available for a party size, date, and time."
+            "available for a party size, date, and time. Use for reservation language "
+            "such as booking or reserving a table once date and time are known."
         ),
         "parameters": {
             "type": "object",
@@ -126,6 +127,7 @@ def _exec_availability(
         "success": True,
         "restaurant_name": restaurant["name"],
         "restaurant_phone": restaurant["phone"],
+        "restaurant_address": restaurant["address"],
         "raw_result": availability_sentence(restaurant["name"], result),
         **result,
     }

@@ -19,6 +19,13 @@ K2_MODEL: str | None = os.getenv("K2_MODEL") or None
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY") or None
 OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
+RETELL_API_KEY: str | None = os.getenv("RETELL_API_KEY") or None
+RETELL_FROM_NUMBER: str | None = os.getenv("RETELL_FROM_NUMBER") or None
+RETELL_AGENT_ID: str | None = os.getenv("RETELL_AGENT_ID") or None
+TABLECALL_DIAL_OVERRIDE: str | None = os.getenv("TABLECALL_DIAL_OVERRIDE") or None
+RETELL_POLL_INTERVAL_SECONDS: float = float(os.getenv("RETELL_POLL_INTERVAL_SECONDS", "2"))
+RETELL_CALL_MAX_WAIT_SECONDS: float = float(os.getenv("RETELL_CALL_MAX_WAIT_SECONDS", "180"))
+
 
 class Settings:
     """Read-only accessor so the rest of the app imports a single object."""
@@ -54,6 +61,30 @@ class Settings:
         """Backward-compatible accessor for older code paths."""
 
         return self.llm_model
+
+    @property
+    def retell_api_key(self) -> str | None:
+        return RETELL_API_KEY
+
+    @property
+    def retell_from_number(self) -> str | None:
+        return RETELL_FROM_NUMBER
+
+    @property
+    def retell_agent_id(self) -> str | None:
+        return RETELL_AGENT_ID
+
+    @property
+    def tablecall_dial_override(self) -> str | None:
+        return TABLECALL_DIAL_OVERRIDE
+
+    @property
+    def retell_poll_interval_seconds(self) -> float:
+        return RETELL_POLL_INTERVAL_SECONDS
+
+    @property
+    def retell_call_max_wait_seconds(self) -> float:
+        return RETELL_CALL_MAX_WAIT_SECONDS
 
 
 settings = Settings()

@@ -11,7 +11,7 @@
       <div class="shell topbar-inner">
         <div>
           <div class="brand">TableCall</div>
-          <div class="tagline">Restaurant availability and hours from one natural request</div>
+          <div class="tagline">Availability, hours, and phone reservations from one natural request</div>
         </div>
         <div id="run-status" class="status-pill">Ready</div>
       </div>
@@ -22,9 +22,9 @@
         <div class="photo-strip" aria-hidden="true"></div>
         <div class="panel-card request-card">
           <p class="eyebrow">Restaurant agent</p>
-          <h1>Check a table or open hours in one request.</h1>
+          <h1>Check a table, open hours, or place a reservation call.</h1>
           <p class="lede">
-            Select a known restaurant, or describe the place naturally with auto-detect.
+            Select a known restaurant, or describe the place naturally with auto-detect. When a time looks open, you can hand off to a Retell voice agent.
           </p>
 
           <form id="agent-form" autocomplete="off">
@@ -67,7 +67,8 @@
           <button class="example-btn" data-example="open" type="button">Can you check whether this restaurant is open right now?</button>
           <button class="example-btn" data-example="search" type="button">Can you check whether Kazu Sushi is open tomorrow at noon?</button>
           <button class="example-btn" data-example="clarify" type="button">Can you check whether this restaurant has room for 4?</button>
-          <button class="example-btn" data-example="unsupported" type="button">Can you book a table for me at this restaurant?</button>
+          <button class="example-btn" data-example="reservation" type="button">Make a reservation for 2 tonight at 6 at the sushi place.</button>
+          <button class="example-btn" data-example="unsupported" type="button">Can you order delivery from this restaurant?</button>
         </div>
       </section>
 
@@ -76,6 +77,7 @@
           <p class="eyebrow">Answer</p>
           <div id="final-answer" class="answer-text">Ready for a restaurant request.</div>
           <div id="answer-context" class="answer-context">Results appear here after the agent checks availability or hours.</div>
+          <div id="reservation-actions" class="reservation-actions" hidden></div>
         </article>
 
         <article class="trace-card">
@@ -118,6 +120,52 @@
         </article>
       </section>
     </main>
+
+    <div id="reservation-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="reservation-modal-title">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2 id="reservation-modal-title">Reservation call</h2>
+          <button type="button" class="ghost-btn modal-close" data-close-modal aria-label="Close">Close</button>
+        </div>
+        <p class="modal-lede">Details are prefilled from your request. Adjust if needed, then start the Retell call.</p>
+        <form id="reservation-form" class="reservation-form">
+          <label class="field">
+            Restaurant
+            <input type="text" id="rf-restaurant" required />
+          </label>
+          <label class="field">
+            Location
+            <input type="text" id="rf-location" />
+          </label>
+          <label class="field">
+            Day / date
+            <input type="text" id="rf-date" required />
+          </label>
+          <label class="field">
+            Time
+            <input type="text" id="rf-time" required />
+          </label>
+          <label class="field">
+            Party size
+            <input type="number" id="rf-party" min="1" max="99" required />
+          </label>
+          <label class="field">
+            Notes for the host
+            <textarea id="rf-notes" rows="2" placeholder="Optional"></textarea>
+          </label>
+          <input type="hidden" id="rf-phone" />
+          <input type="hidden" id="rf-date-token" />
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" data-close-modal>Cancel</button>
+            <button type="submit" class="submit-btn modal-submit" id="rf-submit">
+              <span class="btn-label">Attempt reservation</span>
+              <span class="spinner" hidden></span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>
