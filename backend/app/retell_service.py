@@ -73,6 +73,18 @@ def _interpret_confirmation(call_analysis: Any, call_status: str) -> tuple[bool,
     return False, "Could not determine confirmation from this call. Add a `reservation_confirmed` boolean in Retell post-call analysis for a definitive signal."
 
 
+def _start_error_message(exc: Exception) -> str:
+    detail = f"{exc.__class__.__name__}: {exc}"
+    if "No outbound agent id set up for phone number" in str(exc):
+        return (
+            "Retell could not choose an outbound agent for RETELL_FROM_NUMBER. "
+            "Either bind your reservation agent as the outbound agent for that phone number "
+            "in Retell, or set RETELL_AGENT_ID in .env to that agent's id. "
+            f"Retell detail: {detail}"
+        )
+    return f"Could not start the Retell call: {detail}"
+
+
 def place_reservation_call(
     *,
     restaurant_name: str,
@@ -133,7 +145,7 @@ def place_reservation_call(
             ok=False,
             confirmed=False,
             call_state="start_failed",
-            message=f"Could not start the Retell call: {exc.__class__.__name__}: {exc}",
+            message=_start_error_message(exc),
         )
 
     call_id = getattr(created, "call_id", None)

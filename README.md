@@ -105,8 +105,12 @@ What to do on the Retell website:
 1. Create or choose a phone number in Retell. Copy it into `RETELL_FROM_NUMBER`.
 2. Create a voice agent that can call a restaurant host and ask for a reservation using the dynamic variables below.
 3. Copy the Retell API key into `RETELL_API_KEY`.
-4. Optional: copy the agent ID into `RETELL_AGENT_ID` if you want this app to force one specific agent.
+4. Make the agent available for outbound calls in one of two ways:
+   - Recommended for this demo: copy the agent ID into `RETELL_AGENT_ID`.
+   - Or, in Retell, bind that agent as the outbound agent for the phone number you put in `RETELL_FROM_NUMBER`.
 5. Add a boolean post-call analysis field named `reservation_confirmed`. TableCall uses it as the clean success/failure signal.
+
+If Retell returns `No outbound agent id set up for phone number`, it means step 4 is missing: set `RETELL_AGENT_ID`, restart the backend, and try again.
 
 Dynamic variables sent to Retell:
 
