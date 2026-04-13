@@ -488,11 +488,23 @@ reservationForm.addEventListener("submit", async (event) => {
 });
 
 function callOutcomeText(data) {
-  const parts = [data.message];
-  if (data.call_state) parts.push(`State: ${data.call_state}`);
-  if (data.call_status) parts.push(`Retell status: ${data.call_status}`);
-  if (data.call_id) parts.push(`Call ID: ${data.call_id}`);
-  return parts.filter(Boolean).join(" ");
+  if (data.confirmed) {
+    return data.message || "The restaurant confirmed the reservation.";
+  }
+
+  if (data.call_state === "not_configured" || data.call_state === "start_failed") {
+    return "The reservation call could not be started. Check the calling setup, then try again.";
+  }
+
+  if (data.call_state === "timed_out") {
+    return "The call took too long to finish. Check Retell for the final call result.";
+  }
+
+  if (data.call_state === "poll_failed") {
+    return "The call started, but the final result did not come back. Check the call dashboard for details.";
+  }
+
+  return data.message || "No reservation was confirmed.";
 }
 
 loadRestaurants();
