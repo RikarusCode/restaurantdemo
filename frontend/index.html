@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Restaurant Agent Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Restaurant Agent</p>
+          <h1>Ask about availability or hours.</h1>
+          <p class="lede">Try a request, inspect what the agent understood, and see the mocked restaurant-call result.</p>
+        </div>
+        <img
+          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80"
+          alt="Restaurant dining room"
+          class="intro-image"
+        />
+      </section>
+
+      <section class="card input-card">
+        <h2>Input</h2>
+        <div class="examples" aria-label="Example requests">
+          <button type="button" data-example="availability">Table for 2</button>
+          <button type="button" data-example="open">Open right now</button>
+          <button type="button" data-example="inferred">Infer Kazu Sushi</button>
+        </div>
+
+        <form id="agent-form">
+          <label>
+            Restaurant name
+            <input id="restaurant-name" name="restaurantName" placeholder="Kazu Sushi" />
+          </label>
+
+          <label>
+            Restaurant phone
+            <input id="restaurant-phone" name="restaurantPhone" placeholder="415-555-0142" />
+          </label>
+
+          <label class="full-width">
+            User request
+            <textarea id="user-request" name="userRequest" rows="4" required>Call this restaurant and ask if they have a table for 2 tonight at 7 PM.</textarea>
+          </label>
+
+          <button id="submit-button" class="primary-button" type="submit">Run agent</button>
+        </form>
+      </section>
+
+      <section id="status" class="status" aria-live="polite"></section>
+
+      <section class="results-grid">
+        <article class="card result-card">
+          <h2>Understanding Request</h2>
+          <p class="resolved" id="resolved-info">Run the agent to resolve restaurant info.</p>
+          <pre id="parsed-intent">{}</pre>
+        </article>
+
+        <article class="card result-card">
+          <h2>Calling Tool</h2>
+          <pre id="tool-invocation">{}</pre>
+        </article>
+
+        <article class="card result-card">
+          <h2>Tool Result</h2>
+          <pre id="tool-result">{}</pre>
+        </article>
+
+        <article class="card final-card">
+          <h2>Final Answer</h2>
+          <p id="final-summary">The final answer will appear here.</p>
+        </article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
