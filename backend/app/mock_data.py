@@ -146,13 +146,11 @@ def check_open_status(restaurant: dict[str, Any], at_datetime: datetime | None =
         if current_time < open_time:
             opens_next = f"today at {opens_at}"
         else:
-            next_day = now
-            for _ in range(8):
-                next_day += timedelta(days=1)
-                next_day_name = next_day.strftime("%A")
-                next_open, _ = restaurant["hours"][next_day_name]
-                opens_next = f"{'tomorrow' if (next_day.date() - now.date()).days == 1 else next_day_name} at {next_open}"
-                break
+            next_day = now + timedelta(days=1)
+            next_day_name = next_day.strftime("%A")
+            next_open, _ = restaurant["hours"][next_day_name]
+            label = "tomorrow" if (next_day.date() - now.date()).days == 1 else next_day_name
+            opens_next = f"{label} at {next_open}"
 
     return {
         "is_open": is_open,

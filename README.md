@@ -1,95 +1,124 @@
 # Restaurant Agent Demo
 
-A small end-to-end demo of an LLM-powered restaurant agent. The app accepts a restaurant-related request, extracts structured intent, invokes a mocked restaurant-call tool, and returns a concise user-facing answer with trace fields visible for evaluation.
+A small end-to-end demo for the assignment: the user gives a restaurant-related request, an LLM-style agent understands the task, triggers a restaurant-call tool, receives a result, and returns a short summary.
 
-## Supported Features
+The main path assumes restaurant name and phone are already available, as requested. The search feature is also implemented as a first-class mode: when no restaurant is selected, the agent uses a restaurant lookup tool before making the mocked call.
 
-- Check table availability.
-- Check whether a restaurant is open.
-- Show intermediate agent steps:
-  - parsed intent
-  - extracted slots
-  - selected tool
-  - tool result
-  - final summary
+## What This Demonstrates
 
-## Stretch Goal
+- Intent understanding for two supported tasks:
+  - table availability
+  - open-status / hours checks
+- Tool calling through a mocked restaurant-call layer.
+- A streamed trace that makes each agent step visible in the UI.
+- Deterministic fallback behavior when no OpenAI API key is configured.
+- Fully implemented restaurant search mode using the local demo directory.
 
-If restaurant name or phone are missing, the backend tries to resolve the restaurant from the request using the local mock restaurant dataset. This keeps the search layer reliable for the demo while leaving a clean abstraction for a real Places API later.
+## Demo Flow
+
+```text
+User request
+  -> restaurant on file, or search_restaurant tool
+  -> request understood step
+  -> restaurant-call tool invocation
+  -> mocked restaurant result
+  -> final one-sentence answer
+```
+
+The mocked call layer is intentional. It keeps the assessment focused on the agent loop, tool boundary, reliability, and user experience without adding telephony setup, scraping, databases, queues, or other production infrastructure.
+
+## Supported Requests
+
+| Request type | Example |
+| --- | --- |
+| Table availability | "Call this restaurant and ask if they have a table for 2 tonight at 7 PM." |
+| Open status | "Is this restaurant open right now?" |
+| Search plus open status | "Is Kazu Sushi open tomorrow at noon?" |
+| Clarification | "Do they have room for 4?" |
+| Unsupported | "Can you book a table for me?" |
 
 ## Architecture
 
-- `backend/app/main.py`: FastAPI app and `/agent/run` orchestration.
-- `backend/app/schemas.py`: Pydantic request, intent, tool, and response models.
-- `backend/app/agent.py`: OpenAI structured intent parsing plus deterministic summary formatting.
-- `backend/app/tools.py`: Mocked tool invocation and execution.
-- `backend/app/mock_data.py`: In-memory restaurants, hours, and reservation slots.
-- `backend/app/restaurant_search.py`: Restaurant resolution from supplied info or request text.
-- `backend/app/config.py`: Minimal environment settings.
-- `frontend/`: Plain HTML, CSS, and JavaScript demo UI.
+| File | Purpose |
+| --- | --- |
+| `backend/app/main.py` | FastAPI app, `/agent/run` streaming endpoint, static frontend serving |
+| `backend/app/agent.py` | Agent orchestration, OpenAI tool-calling path, deterministic fallback path |
+| `backend/app/tools.py` | Tool definitions and mocked tool execution |
+| `backend/app/restaurant_search.py` | Restaurant lookup helper for the search feature |
+| `backend/app/mock_data.py` | Three demo restaurants with hours and availability slots |
+| `backend/app/schemas.py` | API request and streamed trace models |
+| `backend/app/config.py` | Minimal environment loading |
+| `frontend/` | Plain HTML, CSS, and JavaScript UI |
 
-The mocked tool execution is intentional: it focuses the demo on agent orchestration, reliable state transitions, and inspectable behavior without introducing telephony, scraping, scheduling queues, or database complexity.
+## Why This Matches The Assignment
+
+The assignment asks for a simple LLM agent that calls a restaurant. This project keeps the scope tight:
+
+- No auth, database, Docker, migrations, queues, or framework-heavy frontend.
+- Restaurant details are selected by the system for the main demo path.
+- The agent exposes intermediate steps so an evaluator can see the request understanding and tool call.
+- The mocked call behaves like the result of a restaurant phone call.
+- Search is included as a real feature, but isolated behind a clean lookup tool.
 
 ## Setup
 
-Create a virtual environment and install backend dependencies:
+From the repository root:
 
-```bash
+```powershell
 cd backend
-python -m venv .venv
-.venv\Scripts\activate
+py -m venv .venv
+.\.venv\Scripts\activate
 pip install -r requirements.txt
+cd ..
+copy .env.example .env
 ```
 
-Copy the example environment file and add your key if you want OpenAI-backed parsing:
+Add an OpenAI key to `.env` for the LLM tool-calling path:
 
-```bash
-copy ..\.env.example ..\.env
-```
-
-Environment variables:
-
-```bash
-OPENAI_API_KEY=
+```text
+OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-If `OPENAI_API_KEY` is not set, the backend uses a small deterministic fallback parser so the demo remains runnable.
+If `OPENAI_API_KEY` is empty, the app still runs with a deterministic fallback parser so the demo remains easy to present.
 
 ## Run
 
-Start the backend from the repository root:
+From the repository root:
 
-```bash
-py -m uvicorn backend.app.main:app --reload --env-file .env
+```powershell
+py -m uvicorn backend.app.main:app --reload
 ```
 
-Open the frontend:
+Open:
 
-```bash
-frontend/index.html
+```text
+http://localhost:8000
 ```
 
-The frontend calls `http://localhost:8000/agent/run`.
+The frontend is served by FastAPI, so there is no separate frontend build step.
 
-## Example Requests
+## Demo Script
 
-- `Call this restaurant and ask if they have a table for 2 tonight at 7 PM.`
-- `Check if this restaurant is open right now.`
-- `Is Kazu Sushi open tomorrow at noon?`
-- `Can you book a table for me?`
-- `Do they have room for 4?`
+1. Start with Kazu Sushi selected.
+2. Click "Table for 2 tonight at 7 PM."
+3. Point out the trace: restaurant on file, request understood, tool call, restaurant response, final answer.
+4. Click "Is this restaurant open right now?"
+5. Click "Is Kazu Sushi open tomorrow at noon?" to show search mode.
+6. Click "Do they have room for 4?" to show the clarification path.
+7. Try "Can you book a table for me?" to show unsupported handling.
 
-## Known Limitations
+## Mock Restaurants
 
-- Restaurant calls are mocked, not live.
-- The search layer only resolves restaurants from the local demo dataset.
-- No persistence, authentication, background jobs, or telephony integration.
-- Date and time handling is intentionally lightweight for demo clarity.
+| Name | Phone | Cuisine |
+| --- | --- | --- |
+| Kazu Sushi | 415-555-0142 | Japanese |
+| Luna Trattoria | 415-555-0188 | Italian |
+| Harbor Garden | 415-555-0119 | Seafood |
 
 ## Tradeoffs And Future Improvements
 
-- Replace mocked search with a real Places provider.
-- Add a live calling or reservation integration behind the existing tool boundary.
-- Expand date/time normalization for broader natural language coverage.
-- Add focused tests around parsing, restaurant resolution, and tool execution.
+- The restaurant call is mocked to keep the demo reliable and self-contained.
+- Search uses the local restaurant directory; a production version could swap in Google Places or another provider behind `restaurant_search.py`.
+- Time parsing is intentionally lightweight and tuned for demo phrases.
+- A production version would add tests, observability, rate limiting, secrets management, and a real telephony or reservation integration.

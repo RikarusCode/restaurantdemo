@@ -1,13 +1,19 @@
-"""FastAPI entrypoint that orchestrates restaurant-agent requests."""
+"""FastAPI entrypoint that streams agent pipeline steps as NDJSON."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
-from .agent import build_summary, parse_user_request
-from .restaurant_search import resolve_restaurant_info
-from .schemas import AgentRequest, AgentResponse
-from .tools import build_tool_invocation, execute_tool
-
+from .agent import run_agent
+from .mock_data import RESTAURANTS
+from .restaurant_search import public_restaurant
+from .schemas import AgentRequest
 
 app = FastAPI(title="Restaurant Agent Demo")
 
@@ -19,35 +25,32 @@ app.add_middleware(
 )
 
 
-@app.post("/agent/run", response_model=AgentResponse)
-def run_agent(request: AgentRequest) -> AgentResponse:
-    """Resolve restaurant info, parse intent, optionally invoke a tool, and respond."""
+@app.get("/api/restaurants")
+def list_restaurants() -> list[dict]:
+    """Expose demo restaurants so the frontend can populate the selector."""
 
-    restaurant_name, restaurant_phone, _metadata = resolve_restaurant_info(
-        request.user_request,
-        request.restaurant_name,
-        request.restaurant_phone,
+    return [public_restaurant(restaurant) for restaurant in RESTAURANTS]
+
+
+@app.post("/agent/run")
+def run_agent_endpoint(request: AgentRequest) -> StreamingResponse:
+    """Stream each agent step as one JSON object per line."""
+
+    def generate():
+        for step in run_agent(
+            request.user_request,
+            request.restaurant_name,
+            request.restaurant_phone,
+        ):
+            yield json.dumps(step, default=str) + "\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
-    parsed_intent = parse_user_request(request)
 
-    if parsed_intent.clarification_needed or parsed_intent.intent == "unsupported":
-        return AgentResponse(
-            restaurant_name=restaurant_name,
-            restaurant_phone=restaurant_phone,
-            parsed_intent=parsed_intent,
-            tool_invocation=None,
-            tool_result=None,
-            summary=build_summary(parsed_intent, None),
-        )
 
-    tool_invocation = build_tool_invocation(parsed_intent, restaurant_name, restaurant_phone)
-    tool_result = execute_tool(parsed_intent, restaurant_name, restaurant_phone)
-
-    return AgentResponse(
-        restaurant_name=restaurant_name,
-        restaurant_phone=restaurant_phone,
-        parsed_intent=parsed_intent,
-        tool_invocation=tool_invocation,
-        tool_result=tool_result,
-        summary=build_summary(parsed_intent, tool_result),
-    )
+_frontend = Path(__file__).resolve().parent.parent.parent / "frontend"
+if _frontend.is_dir():
+    app.mount("/", StaticFiles(directory=str(_frontend), html=True), name="frontend")

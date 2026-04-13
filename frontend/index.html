@@ -7,71 +7,78 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="page-shell">
-      <section class="intro">
-        <div>
-          <p class="eyebrow">Restaurant Agent</p>
-          <h1>Ask about availability or hours.</h1>
-          <p class="lede">Try a request, inspect what the agent understood, and see the mocked restaurant-call result.</p>
-        </div>
+    <header class="topbar">
+      <div class="shell topbar-inner">
+        <div class="brand">Restaurant Agent</div>
+        <div class="status-pill">Tool-calling demo</div>
+      </div>
+    </header>
+
+    <main class="shell workspace">
+      <section class="control-panel">
         <img
-          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80"
+          class="restaurant-photo"
+          src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80"
           alt="Restaurant dining room"
-          class="intro-image"
         />
-      </section>
 
-      <section class="card input-card">
-        <h2>Input</h2>
-        <div class="examples" aria-label="Example requests">
-          <button type="button" data-example="availability">Table for 2</button>
-          <button type="button" data-example="open">Open right now</button>
-          <button type="button" data-example="inferred">Infer Kazu Sushi</button>
+        <div class="panel-card">
+          <h1>Call a restaurant for availability or hours.</h1>
+          <p class="lede">Choose a restaurant on file, or let the agent find one from the request.</p>
+
+          <form id="agent-form" autocomplete="off">
+            <label class="field">
+              Restaurant on file
+              <select id="restaurant-select" aria-label="Restaurant on file"></select>
+            </label>
+
+            <div id="restaurant-details" class="restaurant-details"></div>
+
+            <label class="toggle-row">
+              <input type="checkbox" id="search-mode" />
+              <span>Find restaurant from request</span>
+            </label>
+
+            <label class="field request-field">
+              Request
+              <textarea
+                id="user-request"
+                rows="5"
+                required
+              >Call this restaurant and ask if they have a table for 2 tonight at 7 PM.</textarea>
+            </label>
+
+            <button type="submit" id="submit-btn" class="submit-btn">
+              <span class="btn-label">Run agent</span>
+              <span class="spinner" hidden></span>
+            </button>
+          </form>
         </div>
 
-        <form id="agent-form">
-          <label>
-            Restaurant name
-            <input id="restaurant-name" name="restaurantName" placeholder="Kazu Sushi" />
-          </label>
-
-          <label>
-            Restaurant phone
-            <input id="restaurant-phone" name="restaurantPhone" placeholder="415-555-0142" />
-          </label>
-
-          <label class="full-width">
-            User request
-            <textarea id="user-request" name="userRequest" rows="4" required>Call this restaurant and ask if they have a table for 2 tonight at 7 PM.</textarea>
-          </label>
-
-          <button id="submit-button" class="primary-button" type="submit">Run agent</button>
-        </form>
+        <div class="panel-card examples-card">
+          <h2>Examples</h2>
+          <button class="example-btn" data-example="table" type="button">Table for 2 tonight at 7 PM</button>
+          <button class="example-btn" data-example="open" type="button">Is this restaurant open right now?</button>
+          <button class="example-btn" data-example="search" type="button">Is Kazu Sushi open tomorrow at noon?</button>
+          <button class="example-btn" data-example="clarify" type="button">Do they have room for 4?</button>
+        </div>
       </section>
 
-      <section id="status" class="status" aria-live="polite"></section>
+      <section class="trace-panel" aria-live="polite">
+        <div class="trace-header">
+          <div>
+            <p class="eyebrow">Agent trace</p>
+            <h2>What happens during the call</h2>
+          </div>
+          <div id="run-status" class="run-status">Ready</div>
+        </div>
 
-      <section class="results-grid">
-        <article class="card result-card">
-          <h2>Understanding Request</h2>
-          <p class="resolved" id="resolved-info">Run the agent to resolve restaurant info.</p>
-          <pre id="parsed-intent">{}</pre>
-        </article>
-
-        <article class="card result-card">
-          <h2>Calling Tool</h2>
-          <pre id="tool-invocation">{}</pre>
-        </article>
-
-        <article class="card result-card">
-          <h2>Tool Result</h2>
-          <pre id="tool-result">{}</pre>
-        </article>
-
-        <article class="card final-card">
-          <h2>Final Answer</h2>
-          <p id="final-summary">The final answer will appear here.</p>
-        </article>
+        <div id="pipeline" class="pipeline">
+          <div class="empty-state">
+            <strong>Ready for a request.</strong>
+            <span>The trace will show restaurant info, intent, tool call, tool result, and final answer.</span>
+          </div>
+        </div>
       </section>
     </main>
 

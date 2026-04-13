@@ -1,26 +1,41 @@
-"""Restaurant resolution layer using mock data with an LLM-shaped extension point."""
+"""Restaurant lookup helpers used by the search tool and demo UI."""
 
-from typing import Optional
+from __future__ import annotations
 
-from .mock_data import find_restaurant_in_text, lookup_restaurant
+from typing import Any
+
+from .mock_data import RESTAURANTS, find_restaurant_in_text, lookup_restaurant
 
 
-def resolve_restaurant_info(
-    user_request: str,
-    restaurant_name: Optional[str],
-    restaurant_phone: Optional[str],
-) -> tuple[Optional[str], Optional[str], dict]:
-    """Resolve restaurant name and phone from supplied fields or mock search."""
+def search_restaurants(query: str) -> dict[str, Any]:
+    """Search the local restaurant directory and return trace-friendly metadata."""
 
-    if restaurant_name and restaurant_phone:
-        return restaurant_name, restaurant_phone, {"source": "user_supplied", "confidence": "high"}
+    exact = lookup_restaurant(query)
+    inferred = exact or find_restaurant_in_text(query)
 
-    matched = lookup_restaurant(restaurant_name, restaurant_phone)
-    if matched:
-        return matched["name"], matched["phone"], {"source": "provided_field_match", "confidence": "high"}
-
-    inferred = find_restaurant_in_text(user_request)
     if inferred:
-        return inferred["name"], inferred["phone"], {"source": "mock_text_match", "confidence": "medium"}
+        return {
+            "success": True,
+            "source": "mock_restaurant_directory",
+            "confidence": "high" if exact else "medium",
+            "restaurant": public_restaurant(inferred),
+        }
 
-    return restaurant_name, restaurant_phone, {"source": "unresolved", "confidence": "low"}
+    return {
+        "success": False,
+        "source": "mock_restaurant_directory",
+        "confidence": "low",
+        "error": f"No restaurant found for '{query}'.",
+        "candidates": [public_restaurant(restaurant) for restaurant in RESTAURANTS],
+    }
+
+
+def public_restaurant(restaurant: dict[str, Any]) -> dict[str, Any]:
+    """Return the public fields shown in the frontend and traces."""
+
+    return {
+        "name": restaurant["name"],
+        "phone": restaurant["phone"],
+        "cuisine": restaurant["cuisine"],
+        "address": restaurant["address"],
+    }

@@ -1,92 +1,224 @@
-"""Mocked tool invocation and execution for restaurant call behavior."""
+"""Tool definitions for OpenAI function calling and mock execution."""
+
+from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 from .mock_data import check_availability, check_open_status, lookup_restaurant, normalize_time
-from .schemas import ParsedIntent, ToolInvocation, ToolResult
+from .restaurant_search import search_restaurants
 
 
-def _datetime_from_intent(parsed_intent: ParsedIntent) -> datetime | None:
-    """Build a demo datetime for open-status checks when date/time are supplied."""
-
-    normalized_time = normalize_time(parsed_intent.requested_time or parsed_intent.natural_language_time)
-    if not normalized_time:
-        return None
-
-    base = datetime.now()
-    if (parsed_intent.requested_date or "").lower() == "tomorrow" or "tomorrow" in (parsed_intent.natural_language_time or "").lower():
-        base += timedelta(days=1)
-
-    parsed_time = datetime.strptime(normalized_time, "%I:%M %p").time()
-    return datetime.combine(base.date(), parsed_time)
-
-
-def build_tool_invocation(
-    parsed_intent: ParsedIntent,
-    restaurant_name: str | None,
-    restaurant_phone: str | None,
-) -> ToolInvocation:
-    """Build a traceable tool invocation from parsed intent and restaurant info."""
-
-    return ToolInvocation(
-        tool_name=parsed_intent.intent,
-        tool_args={
-            "restaurant_name": restaurant_name,
-            "restaurant_phone": restaurant_phone,
-            "party_size": parsed_intent.party_size,
-            "requested_date": parsed_intent.requested_date,
-            "requested_time": parsed_intent.requested_time,
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": "call_restaurant_check_availability",
+        "description": (
+            "Simulate calling the selected restaurant to ask whether a table is "
+            "available for a party size, date, and time."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "party_size": {
+                    "type": "integer",
+                    "description": "Number of guests in the party.",
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Date to check, such as 'tonight' or 'tomorrow'.",
+                },
+                "time": {
+                    "type": "string",
+                    "description": "Time to check, such as '7:00 PM' or 'noon'.",
+                },
+            },
+            "required": ["party_size", "date", "time"],
+            "additionalProperties": False,
         },
-    )
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "call_restaurant_check_hours",
+        "description": (
+            "Simulate calling the selected restaurant to ask whether it is open "
+            "now or at a specified date and time."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date to check, such as 'today' or 'tomorrow'.",
+                },
+                "time": {
+                    "type": ["string", "null"],
+                    "description": "Specific time to check, or null for current status.",
+                },
+            },
+            "required": ["date", "time"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+]
+
+SEARCH_TOOL_DEFINITION: dict[str, Any] = {
+    "type": "function",
+    "name": "search_restaurant",
+    "description": "Search the demo restaurant directory by name.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Restaurant name or search phrase from the user request.",
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+TOOL_DISPLAY_NAMES: dict[str, str] = {
+    "call_restaurant_check_availability": "Calling Restaurant - Table Availability",
+    "call_restaurant_check_hours": "Calling Restaurant - Hours Check",
+    "search_restaurant": "Searching for Restaurant",
+}
 
 
 def execute_tool(
-    parsed_intent: ParsedIntent,
+    tool_name: str,
+    arguments: dict[str, Any],
     restaurant_name: str | None,
     restaurant_phone: str | None,
-) -> ToolResult:
-    """Execute the mocked restaurant tool and return raw plus structured output."""
+) -> dict[str, Any]:
+    """Dispatch to the correct mock handler and return a structured result."""
 
-    restaurant = lookup_restaurant(restaurant_name, restaurant_phone)
+    if tool_name == "call_restaurant_check_availability":
+        return _exec_availability(arguments, restaurant_name, restaurant_phone)
+    if tool_name == "call_restaurant_check_hours":
+        return _exec_hours(arguments, restaurant_name, restaurant_phone)
+    if tool_name == "search_restaurant":
+        return _exec_search(arguments)
+
+    return {"success": False, "error": f"Unknown tool: {tool_name}"}
+
+
+def _exec_availability(
+    args: dict[str, Any],
+    name: str | None,
+    phone: str | None,
+) -> dict[str, Any]:
+    restaurant = lookup_restaurant(name, phone)
     if restaurant is None:
-        return ToolResult(
-            success=False,
-            raw_result="I could not find that restaurant in the demo data.",
-            structured_result={"error": "restaurant_not_found"},
-        )
+        return _restaurant_not_found()
 
-    if parsed_intent.intent == "check_table_availability":
-        result = check_availability(
-            restaurant,
-            parsed_intent.party_size,
-            parsed_intent.requested_date,
-            parsed_intent.requested_time,
-        )
-        if result["status"] == "available":
-            raw = (
-                f"{restaurant['name']} has availability for {result['party_size']} "
-                f"at {result['requested_time']} {result['requested_date']}."
-            )
-        elif result["alternative_time"]:
-            raw = (
-                f"{restaurant['name']} is unavailable at {result['requested_time']}, "
-                f"but {result['alternative_time']} is available."
-            )
-        else:
-            raw = f"{restaurant['name']} has no availability {result['requested_date']}."
-
-        return ToolResult(success=True, raw_result=raw, structured_result=result)
-
-    if parsed_intent.intent == "check_open_status":
-        result = check_open_status(restaurant, _datetime_from_intent(parsed_intent))
-        if result["is_open"]:
-            raw = f"{restaurant['name']} is open now and closes at {result['closes_at']}."
-        else:
-            raw = f"{restaurant['name']} is closed now and opens {result['opens_next']}."
-        return ToolResult(success=True, raw_result=raw, structured_result=result)
-
-    return ToolResult(
-        success=False,
-        raw_result="This demo currently supports table availability and open-status checks only.",
-        structured_result={"error": "unsupported_intent"},
+    result = check_availability(
+        restaurant,
+        args.get("party_size"),
+        args.get("date"),
+        normalize_time(args.get("time")),
     )
+    return {
+        "success": True,
+        "restaurant_name": restaurant["name"],
+        "restaurant_phone": restaurant["phone"],
+        "raw_result": availability_sentence(restaurant["name"], result),
+        **result,
+    }
+
+
+def _exec_hours(
+    args: dict[str, Any],
+    name: str | None,
+    phone: str | None,
+) -> dict[str, Any]:
+    restaurant = lookup_restaurant(name, phone)
+    if restaurant is None:
+        return _restaurant_not_found()
+
+    at_dt = _build_datetime(args.get("date"), args.get("time"))
+    result = check_open_status(restaurant, at_dt)
+    return {
+        "success": True,
+        "restaurant_name": restaurant["name"],
+        "restaurant_phone": restaurant["phone"],
+        "raw_result": hours_sentence(restaurant["name"], result, bool(args.get("time"))),
+        **result,
+    }
+
+
+def _exec_search(args: dict[str, Any]) -> dict[str, Any]:
+    result = search_restaurants(args.get("query", ""))
+    if not result["success"]:
+        return result
+
+    restaurant = result["restaurant"]
+    matched = lookup_restaurant(restaurant["name"], restaurant["phone"])
+    day = datetime.now().strftime("%A")
+    opens, closes = matched["hours"][day] if matched else ("unknown", "unknown")
+    return {
+        "success": True,
+        "name": restaurant["name"],
+        "phone": restaurant["phone"],
+        "cuisine": restaurant["cuisine"],
+        "address": restaurant["address"],
+        "hours_today": f"{opens} to {closes}",
+        "resolution": {
+            "source": result["source"],
+            "confidence": result["confidence"],
+        },
+    }
+
+
+def _build_datetime(date_str: str | None, time_str: str | None) -> datetime | None:
+    normalized = normalize_time(time_str) if time_str else None
+    base = datetime.now()
+
+    if date_str and "tomorrow" in date_str.lower():
+        base += timedelta(days=1)
+
+    if normalized:
+        parsed_time = datetime.strptime(normalized, "%I:%M %p").time()
+        return datetime.combine(base.date(), parsed_time)
+
+    return None if not date_str else base
+
+
+def _restaurant_not_found() -> dict[str, Any]:
+    return {
+        "success": False,
+        "error": "Restaurant not found in the demo directory.",
+        "hint": "Select a restaurant or use Search mode with a restaurant name in the request.",
+    }
+
+
+def availability_sentence(restaurant_name: str, result: dict[str, Any]) -> str:
+    """Human-readable result from the mocked availability call."""
+
+    party_size = result.get("party_size") or "your party"
+    requested_time = result.get("requested_time") or "that time"
+    requested_date = result.get("requested_date") or "that date"
+
+    if result.get("status") == "available":
+        return f"{restaurant_name} has a table for {party_size} at {requested_time} {requested_date}."
+    if result.get("alternative_time"):
+        return (
+            f"{restaurant_name} does not have a table at {requested_time}, "
+            f"but {result['alternative_time']} is available."
+        )
+    return f"{restaurant_name} has no availability {requested_date}."
+
+
+def hours_sentence(restaurant_name: str, result: dict[str, Any], checked_specific_time: bool) -> str:
+    """Human-readable result from the mocked hours call."""
+
+    if result.get("is_open"):
+        prefix = "is open at that time" if checked_specific_time else "is open now"
+        return f"{restaurant_name} {prefix} and closes at {result.get('closes_at')}."
+
+    prefix = "is closed at that time" if checked_specific_time else "is closed now"
+    return f"{restaurant_name} {prefix} and opens {result.get('opens_next')}."
