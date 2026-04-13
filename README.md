@@ -11,6 +11,7 @@ The main path assumes restaurant name and phone are already available, as reques
   - open-status / hours checks
 - Tool calling through a mocked restaurant-call layer.
 - A streamed trace that makes each agent step visible in the UI.
+- Natural restaurant lookup with aliases such as "the sushi place" or "the Italian place."
 - Deterministic fallback behavior when no OpenAI API key is configured.
 - Fully implemented restaurant search mode using the local demo directory.
 
@@ -34,6 +35,7 @@ The mocked call layer is intentional. It keeps the assessment focused on the age
 | Table availability | "Call this restaurant and ask if they have a table for 2 tonight at 7 PM." |
 | Open status | "Is this restaurant open right now?" |
 | Search plus open status | "Is Kazu Sushi open tomorrow at noon?" |
+| Natural shorthand | "check if the sushi place is avaliable at 6" |
 | Clarification | "Do they have room for 4?" |
 | Unsupported | "Can you book a table for me?" |
 
@@ -45,7 +47,7 @@ The mocked call layer is intentional. It keeps the assessment focused on the age
 | `backend/app/agent.py` | Agent orchestration, OpenAI tool-calling path, deterministic fallback path |
 | `backend/app/tools.py` | Tool definitions and mocked tool execution |
 | `backend/app/restaurant_search.py` | Restaurant lookup helper for the search feature |
-| `backend/app/mock_data.py` | Three demo restaurants with hours and availability slots |
+| `backend/app/mock_data.py` | Three demo restaurants with aliases, hours, policies, capacity, and availability slots |
 | `backend/app/schemas.py` | API request and streamed trace models |
 | `backend/app/config.py` | Minimal environment loading |
 | `frontend/` | Plain HTML, CSS, and JavaScript UI |
@@ -105,9 +107,10 @@ The frontend is served by FastAPI, so there is no separate frontend build step.
 2. Click "Table for 2 tonight at 7 PM."
 3. Point out the trace: restaurant on file, request understood, tool call, restaurant response, final answer.
 4. Click "Is this restaurant open right now?"
-5. Click "Is Kazu Sushi open tomorrow at noon?" to show search mode.
-6. Click "Do they have room for 4?" to show the clarification path.
-7. Try "Can you book a table for me?" to show unsupported handling.
+5. Click "check if the sushi place is avaliable at 6" to show alias lookup, typo tolerance, and time assumptions.
+6. Click "Is Kazu Sushi open tomorrow at noon?" to show search mode.
+7. Click "Do they have room for 4?" to show the clarification path.
+8. Try "Can you book a table for me?" to show unsupported handling.
 
 ## Mock Restaurants
 

@@ -1,6 +1,11 @@
 const API_BASE = window.location.origin;
 
 const EXAMPLES = {
+  natural: {
+    restaurant: null,
+    request: "check if the sushi place is avaliable at 6",
+    search: true,
+  },
   table: {
     restaurant: "Kazu Sushi",
     request: "Call this restaurant and ask if they have a table for 2 tonight at 7 PM.",
@@ -25,23 +30,28 @@ const EXAMPLES = {
 
 const STEP_LABELS = {
   restaurant_info: "Restaurant",
-  understanding: "Intent",
-  tool_call: "Tool call",
-  tool_result: "Tool result",
+  understanding: "Understood",
+  tool_call: "Tool",
+  tool_result: "Result",
   notice: "Notice",
   summary: "Answer",
 };
 
 let restaurants = [];
+let traceVisible = true;
 
 const restaurantSelect = document.getElementById("restaurant-select");
 const restaurantDetails = document.getElementById("restaurant-details");
+const restaurantTable = document.getElementById("restaurant-table");
 const searchMode = document.getElementById("search-mode");
 const form = document.getElementById("agent-form");
 const textarea = document.getElementById("user-request");
 const submitButton = document.getElementById("submit-btn");
 const pipeline = document.getElementById("pipeline");
 const runStatus = document.getElementById("run-status");
+const finalAnswer = document.getElementById("final-answer");
+const answerContext = document.getElementById("answer-context");
+const traceToggle = document.getElementById("trace-toggle");
 
 async function loadRestaurants() {
   try {
@@ -52,6 +62,7 @@ async function loadRestaurants() {
   }
 
   renderRestaurantOptions();
+  renderRestaurantTable();
 }
 
 function renderRestaurantOptions() {
@@ -75,9 +86,37 @@ function renderRestaurantDetails() {
   }
 
   restaurantDetails.innerHTML = `
-    <p><strong>${escapeHtml(restaurant.phone)}</strong></p>
-    <p>${escapeHtml(restaurant.cuisine)} &middot; ${escapeHtml(restaurant.address)}</p>
+    <div>
+      <strong>${escapeHtml(restaurant.name)}</strong>
+      <span>${escapeHtml(restaurant.cuisine)} &middot; ${escapeHtml(restaurant.neighborhood)}</span>
+    </div>
+    <p>${escapeHtml(restaurant.phone)} &middot; ${escapeHtml(restaurant.address)}</p>
+    <p>${escapeHtml(restaurant.summary)}</p>
   `;
+}
+
+function renderRestaurantTable() {
+  const today = new Date().toLocaleDateString(undefined, { weekday: "long" });
+  restaurantTable.innerHTML = restaurants.map((restaurant) => {
+    const hours = restaurant.hours?.[today] || ["Closed", ""];
+    const tonight = Object.entries(restaurant.availability?.tonight || {})
+      .map(([time, slot]) => `${time}: ${slot.available ? `up to ${slot.max_party_size}` : "booked"}`)
+      .slice(0, 4)
+      .join(", ");
+
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(restaurant.name)}</strong>
+          <span>${escapeHtml(restaurant.phone)}</span>
+        </td>
+        <td>${escapeHtml(restaurant.style)}<span>${escapeHtml(restaurant.price_range)}</span></td>
+        <td>${escapeHtml(hours[0])} to ${escapeHtml(hours[1])}</td>
+        <td>${escapeHtml(restaurant.aliases.slice(0, 4).join(", "))}</td>
+        <td>${escapeHtml(tonight)}</td>
+      </tr>
+    `;
+  }).join("");
 }
 
 function setSearchMode(enabled) {
@@ -88,32 +127,31 @@ function setSearchMode(enabled) {
 
 function setLoading(enabled) {
   submitButton.disabled = enabled;
-  submitButton.querySelector(".btn-label").textContent = enabled ? "Running..." : "Run agent";
+  submitButton.querySelector(".btn-label").textContent = enabled ? "Checking..." : "Check restaurant";
   submitButton.querySelector(".spinner").hidden = !enabled;
   runStatus.textContent = enabled ? "Running" : "Ready";
 }
 
-function clearPipeline() {
+function resetRunState() {
   pipeline.innerHTML = "";
+  finalAnswer.textContent = "Checking the restaurant...";
+  answerContext.textContent = "The response will update as soon as the tool result is ready.";
 }
 
 function renderStep(step, index) {
+  if (step.step === "summary") {
+    finalAnswer.textContent = step.data.text;
+    answerContext.textContent = "Completed with a mocked restaurant-call tool.";
+  }
+
   const element = document.createElement("article");
   element.className = `trace-step trace-${step.step}`;
-  element.style.animationDelay = `${Math.min(index * 40, 240)}ms`;
+  element.style.animationDelay = `${Math.min(index * 35, 210)}ms`;
 
   const label = STEP_LABELS[step.step] || "Step";
   const number = step.step === "summary" ? "OK" : String(index + 1).padStart(2, "0");
 
-  if (step.step === "summary") {
-    element.innerHTML = `
-      <div class="step-marker">${number}</div>
-      <div class="step-content final-answer">
-        <div class="step-label">${escapeHtml(label)}</div>
-        <p>${escapeHtml(step.data.text)}</p>
-      </div>
-    `;
-  } else if (step.step === "restaurant_info") {
+  if (step.step === "restaurant_info") {
     element.innerHTML = `
       <div class="step-marker">${number}</div>
       <div class="step-content">
@@ -121,6 +159,22 @@ function renderStep(step, index) {
         <h3>${escapeHtml(step.title)}</h3>
         <p><strong>${escapeHtml(step.data.name)}</strong> &middot; ${escapeHtml(step.data.phone)}</p>
         ${step.data.cuisine ? `<p class="meta">${escapeHtml(step.data.cuisine)} &middot; ${escapeHtml(step.data.address)}</p>` : ""}
+      </div>
+    `;
+  } else if (step.step === "understanding") {
+    element.innerHTML = `
+      <div class="step-marker">${number}</div>
+      <div class="step-content compact-step">
+        <div class="step-label">${escapeHtml(label)}</div>
+        ${renderUnderstanding(step.data)}
+      </div>
+    `;
+  } else if (step.step === "summary") {
+    element.innerHTML = `
+      <div class="step-marker">${number}</div>
+      <div class="step-content compact-step">
+        <div class="step-label">${escapeHtml(label)}</div>
+        <p>${escapeHtml(step.data.text)}</p>
       </div>
     `;
   } else {
@@ -137,7 +191,23 @@ function renderStep(step, index) {
   pipeline.appendChild(element);
 }
 
+function renderUnderstanding(data) {
+  const chips = Object.entries(data)
+    .filter(([key, value]) => key !== "assumptions" && value !== null && value !== undefined)
+    .map(([key, value]) => `<span class="chip">${escapeHtml(key)}: ${escapeHtml(value)}</span>`)
+    .join("");
+
+  const assumptions = Object.values(data.assumptions || {}).filter(Boolean);
+  const assumptionText = assumptions.length
+    ? `<p class="assumption">${escapeHtml(assumptions.join(" "))}</p>`
+    : "";
+
+  return `<div class="chip-row">${chips}</div>${assumptionText}`;
+}
+
 function renderError(message) {
+  finalAnswer.textContent = "I could not reach the local backend.";
+  answerContext.textContent = message;
   pipeline.innerHTML = `
     <article class="trace-step trace-error">
       <div class="step-marker">!</div>
@@ -153,7 +223,7 @@ function renderError(message) {
 
 async function runAgent(event) {
   event.preventDefault();
-  clearPipeline();
+  resetRunState();
   setLoading(true);
 
   const payload = { user_request: textarea.value.trim() };
@@ -223,6 +293,11 @@ function escapeHtml(value) {
 restaurantSelect.addEventListener("change", renderRestaurantDetails);
 searchMode.addEventListener("change", () => setSearchMode(searchMode.checked));
 form.addEventListener("submit", runAgent);
+traceToggle.addEventListener("click", () => {
+  traceVisible = !traceVisible;
+  pipeline.hidden = !traceVisible;
+  traceToggle.textContent = traceVisible ? "Hide trace" : "Show trace";
+});
 
 document.querySelectorAll("[data-example]").forEach((button) => {
   button.addEventListener("click", () => {

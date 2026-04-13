@@ -3,60 +3,65 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Restaurant Agent Demo</title>
+    <title>Restaurant Agent</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="shell topbar-inner">
-        <div class="brand">Restaurant Agent</div>
-        <div class="status-pill">Tool-calling demo</div>
+        <div>
+          <div class="brand">Restaurant Agent</div>
+          <div class="tagline">Local demo for availability and hours checks</div>
+        </div>
+        <div id="run-status" class="status-pill">Ready</div>
       </div>
     </header>
 
-    <main class="shell workspace">
-      <section class="control-panel">
-        <img
-          class="restaurant-photo"
-          src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80"
-          alt="Restaurant dining room"
-        />
-
-        <div class="panel-card">
-          <h1>Call a restaurant for availability or hours.</h1>
-          <p class="lede">Choose a restaurant on file, or let the agent find one from the request.</p>
+    <main class="shell app-layout">
+      <section class="request-panel">
+        <div class="photo-strip" aria-hidden="true"></div>
+        <div class="panel-card request-card">
+          <p class="eyebrow">Ask the agent</p>
+          <h1>Check a restaurant without making the call yourself.</h1>
+          <p class="lede">
+            Choose a restaurant on file, or let the agent infer it from your request.
+          </p>
 
           <form id="agent-form" autocomplete="off">
-            <label class="field">
-              Restaurant on file
-              <select id="restaurant-select" aria-label="Restaurant on file"></select>
-            </label>
+            <div class="mode-grid">
+              <label class="field">
+                Restaurant on file
+                <select id="restaurant-select" aria-label="Restaurant on file"></select>
+              </label>
+              <label class="search-toggle">
+                <input type="checkbox" id="search-mode" />
+                <span>
+                  <strong>Auto-detect</strong>
+                  <small>Use request text like "the sushi place"</small>
+                </span>
+              </label>
+            </div>
 
             <div id="restaurant-details" class="restaurant-details"></div>
 
-            <label class="toggle-row">
-              <input type="checkbox" id="search-mode" />
-              <span>Find restaurant from request</span>
-            </label>
-
             <label class="field request-field">
               Request
-              <textarea
-                id="user-request"
-                rows="5"
-                required
-              >Call this restaurant and ask if they have a table for 2 tonight at 7 PM.</textarea>
+              <textarea id="user-request" rows="4" required>check if the sushi place is avaliable at 6</textarea>
             </label>
 
             <button type="submit" id="submit-btn" class="submit-btn">
-              <span class="btn-label">Run agent</span>
+              <span class="btn-label">Check restaurant</span>
               <span class="spinner" hidden></span>
             </button>
           </form>
         </div>
 
         <div class="panel-card examples-card">
-          <h2>Examples</h2>
+          <div class="section-heading">
+            <h2>Try these</h2>
+            <span>Demo-ready prompts</span>
+          </div>
+          <button class="example-btn" data-example="natural" type="button">check if the sushi place is avaliable at 6</button>
           <button class="example-btn" data-example="table" type="button">Table for 2 tonight at 7 PM</button>
           <button class="example-btn" data-example="open" type="button">Is this restaurant open right now?</button>
           <button class="example-btn" data-example="search" type="button">Is Kazu Sushi open tomorrow at noon?</button>
@@ -64,21 +69,51 @@
         </div>
       </section>
 
-      <section class="trace-panel" aria-live="polite">
-        <div class="trace-header">
-          <div>
-            <p class="eyebrow">Agent trace</p>
-            <h2>What happens during the call</h2>
-          </div>
-          <div id="run-status" class="run-status">Ready</div>
-        </div>
+      <section class="response-panel">
+        <article class="answer-card">
+          <p class="eyebrow">Answer</p>
+          <div id="final-answer" class="answer-text">Ask a question to check availability or hours.</div>
+          <div id="answer-context" class="answer-context">The agent will call a mock restaurant tool and summarize the result here.</div>
+        </article>
 
-        <div id="pipeline" class="pipeline">
-          <div class="empty-state">
-            <strong>Ready for a request.</strong>
-            <span>The trace will show restaurant info, intent, tool call, tool result, and final answer.</span>
+        <article class="trace-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Behind the scenes</p>
+              <h2>How the agent handled it</h2>
+            </div>
+            <button id="trace-toggle" class="ghost-btn" type="button">Hide trace</button>
           </div>
-        </div>
+          <div id="pipeline" class="pipeline">
+            <div class="empty-state">
+              <strong>No run yet.</strong>
+              <span>Intent, restaurant lookup, tool call, and tool result will appear here.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="directory-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Mock restaurant data</p>
+              <h2>Local directory</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Restaurant</th>
+                  <th>Type</th>
+                  <th>Hours Today</th>
+                  <th>Useful aliases</th>
+                  <th>Tonight</th>
+                </tr>
+              </thead>
+              <tbody id="restaurant-table"></tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </main>
 

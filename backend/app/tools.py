@@ -204,7 +204,8 @@ def availability_sentence(restaurant_name: str, result: dict[str, Any]) -> str:
     requested_date = result.get("requested_date") or "that date"
 
     if result.get("status") == "available":
-        return f"{restaurant_name} has a table for {party_size} at {requested_time} {requested_date}."
+        note = f" ({result['requested_slot_note']})" if result.get("requested_slot_note") else ""
+        return f"{restaurant_name} has a table for {party_size} at {requested_time} {requested_date}{note}."
     if result.get("alternative_time"):
         return (
             f"{restaurant_name} does not have a table at {requested_time}, "

@@ -1,6 +1,14 @@
 [
   {
     "id": "TC-01",
+    "title": "Natural alias and typo availability path",
+    "restaurant_name": null,
+    "restaurant_phone": null,
+    "user_request": "check if the sushi place is avaliable at 6",
+    "expected_summary_contains": "They have a table for 2 at 6:00 PM."
+  },
+  {
+    "id": "TC-02",
     "title": "Core table availability path",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
@@ -8,7 +16,7 @@
     "expected_summary_contains": "7:30 PM is available"
   },
   {
-    "id": "TC-02",
+    "id": "TC-03",
     "title": "Available table path",
     "restaurant_name": "Luna Trattoria",
     "restaurant_phone": "415-555-0188",
@@ -16,7 +24,7 @@
     "expected_summary_contains": "They have a table for 2 at 7:00 PM."
   },
   {
-    "id": "TC-03",
+    "id": "TC-04",
     "title": "Current open-status path",
     "restaurant_name": "Luna Trattoria",
     "restaurant_phone": "415-555-0188",
@@ -24,7 +32,7 @@
     "expected_trace_contains": "Calling Restaurant - Hours Check"
   },
   {
-    "id": "TC-04",
+    "id": "TC-05",
     "title": "Future open-status path",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
@@ -32,7 +40,7 @@
     "expected_trace_contains": "12:00 PM"
   },
   {
-    "id": "TC-05",
+    "id": "TC-06",
     "title": "Search then hours check",
     "restaurant_name": null,
     "restaurant_phone": null,
@@ -40,7 +48,7 @@
     "expected_trace_contains": "Searching for Restaurant"
   },
   {
-    "id": "TC-06",
+    "id": "TC-07",
     "title": "Search then availability check",
     "restaurant_name": null,
     "restaurant_phone": null,
@@ -48,7 +56,7 @@
     "expected_trace_contains": "Restaurant Found"
   },
   {
-    "id": "TC-07",
+    "id": "TC-08",
     "title": "Clarification required",
     "restaurant_name": "Harbor Garden",
     "restaurant_phone": "415-555-0119",
@@ -56,7 +64,7 @@
     "expected_summary_contains": "Please specify the date and time"
   },
   {
-    "id": "TC-08",
+    "id": "TC-09",
     "title": "Unsupported booking request",
     "restaurant_name": "Kazu Sushi",
     "restaurant_phone": "415-555-0142",
@@ -64,7 +72,7 @@
     "expected_summary_contains": "supports table availability and open-status checks only"
   },
   {
-    "id": "TC-09",
+    "id": "TC-10",
     "title": "Unknown restaurant search failure",
     "restaurant_name": null,
     "restaurant_phone": null,

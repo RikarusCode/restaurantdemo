@@ -31,6 +31,9 @@ Supported tasks:
 
 Use exactly one of the provided restaurant-call tools for supported requests.
 Do not call a table-availability tool unless party size, date, and time are present.
+If party size is missing for availability, assume 2 guests.
+If date is missing for availability, assume tonight.
+If the user says a dinner-hour time like "at 6" without AM/PM, interpret it as 6:00 PM.
 If details are missing, ask for clarification without calling a tool.
 If the user asks to book, reserve, order, see a menu, complain, or do anything else,
 say that this demo supports table availability and open-status checks only.
@@ -51,6 +54,9 @@ Supported tasks:
 
 If no restaurant name is present, ask the user to specify a restaurant.
 Do not call a table-availability tool unless party size, date, and time are present.
+If party size is missing for availability, assume 2 guests.
+If date is missing for availability, assume tonight.
+If the user says a dinner-hour time like "at 6" without AM/PM, interpret it as 6:00 PM.
 If details are missing, ask for clarification without calling a tool.
 If the user asks to book, reserve, order, see a menu, complain, or do anything else,
 say that this demo supports table availability and open-status checks only.
@@ -80,9 +86,9 @@ def run_agent(
         except Exception as exc:
             yield _step(
                 "notice",
-                "LLM Unavailable",
+                "Using Local Fast Path",
                 {
-                    "message": "OpenAI parsing failed, so the demo is using the deterministic fallback.",
+                    "message": "The configured LLM provider was unavailable, so the local parser handled this request.",
                     "error": exc.__class__.__name__,
                 },
             )
@@ -95,7 +101,7 @@ def _run_with_llm(
     restaurant_name: str | None,
     restaurant_phone: str | None,
 ) -> Generator[Step, None, None]:
-    client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
+    client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url, timeout=3.0, max_retries=0)
     has_restaurant = bool(restaurant_name and restaurant_phone)
     system_prompt = (
         SYSTEM_PROMPT.format(restaurant_name=restaurant_name, restaurant_phone=restaurant_phone)
@@ -103,40 +109,43 @@ def _run_with_llm(
         else SYSTEM_PROMPT_SEARCH
     )
     tools = list(TOOL_DEFINITIONS) if has_restaurant else [SEARCH_TOOL_DEFINITION, *TOOL_DEFINITIONS]
-    conversation: list[Any] = [
+    messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_request},
     ]
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.responses.create(
+        response = client.chat.completions.create(
             model=settings.llm_model,
-            input=conversation,
-            tools=tools,
+            messages=messages,
+            tools=_as_chat_tools(tools),
+            tool_choice="auto",
         )
-        tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+        message = response.choices[0].message
+        tool_calls = message.tool_calls or []
 
         if not tool_calls:
-            yield _step("summary", "Final Answer", {"text": _clean_summary(response.output_text)})
+            yield _step("summary", "Final Answer", {"text": _clean_summary(message.content)})
             return
 
-        conversation.extend(_serialize_output_items(response.output))
+        messages.append(message.model_dump(exclude_none=True))
 
         for tool_call in tool_calls:
-            args = json.loads(tool_call.arguments or "{}")
+            args = json.loads(tool_call.function.arguments or "{}")
+            tool_name = tool_call.function.name
 
-            if tool_call.name != "search_restaurant":
-                yield _step("understanding", "Request Understood", _understanding_from_tool(tool_call.name, args))
+            if tool_name != "search_restaurant":
+                yield _step("understanding", "Request Understood", _understanding_from_tool(tool_name, args))
 
             yield _step(
                 "tool_call",
-                TOOL_DISPLAY_NAMES.get(tool_call.name, tool_call.name),
-                {"tool_name": tool_call.name, "arguments": args},
+                TOOL_DISPLAY_NAMES.get(tool_name, tool_name),
+                {"tool_name": tool_name, "arguments": args},
             )
 
-            result = execute_tool(tool_call.name, args, restaurant_name, restaurant_phone)
+            result = execute_tool(tool_name, args, restaurant_name, restaurant_phone)
 
-            if tool_call.name == "search_restaurant" and result.get("success"):
+            if tool_name == "search_restaurant" and result.get("success"):
                 restaurant_name = result["name"]
                 restaurant_phone = result["phone"]
                 yield _step(
@@ -153,11 +162,11 @@ def _run_with_llm(
                 )
 
             yield _step("tool_result", "Restaurant Response", result)
-            conversation.append(
+            messages.append(
                 {
-                    "type": "function_call_output",
-                    "call_id": tool_call.call_id,
-                    "output": json.dumps(result),
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(result),
                 }
             )
 
@@ -225,22 +234,27 @@ def _fallback_availability(
     phone: str | None,
 ) -> Generator[Step, None, None]:
     party_size = _extract_party_size(text)
-    requested_date = _extract_date(text)
+    requested_date = _extract_date(text) or "tonight"
     requested_time = _extract_time(text)
 
     understanding = {
         "intent": "check_table_availability",
-        "party_size": party_size,
+        "party_size": party_size or 2,
         "date": requested_date,
         "time": requested_time,
+        "assumptions": {
+            "party_size": "Assumed 2 guests when not specified." if party_size is None else None,
+            "date": "Assumed tonight when not specified." if requested_date == "tonight" and "tonight" not in text else None,
+            "time": "Interpreted bare dinner-hour time as PM." if _has_bare_time(text) else None,
+        },
     }
     yield _step("understanding", "Request Understood", understanding)
 
-    if not party_size or not requested_date or not requested_time:
+    if not requested_time:
         yield _step("summary", "Final Answer", {"text": CLARIFICATION_MESSAGE})
         return
 
-    args = {"party_size": party_size, "date": requested_date, "time": requested_time}
+    args = {"party_size": party_size or 2, "date": requested_date, "time": requested_time}
     yield _step(
         "tool_call",
         TOOL_DISPLAY_NAMES["call_restaurant_check_availability"],
@@ -282,11 +296,15 @@ def _summary_from_tool_result(kind: str, result: dict[str, Any]) -> str:
     if kind == "availability":
         party_size = result.get("party_size") or "your party"
         requested_time = result.get("requested_time") or "that time"
+        assumptions = _format_assumptions(result.get("assumptions", {}))
         if result.get("status") == "available":
-            return f"They have a table for {party_size} at {requested_time}."
+            note = f" {assumptions}" if assumptions else ""
+            return f"They have a table for {party_size} at {requested_time}.{note}"
         if result.get("alternative_time"):
-            return f"They do not have a table for {party_size} at {requested_time}, but {result['alternative_time']} is available."
-        return f"They do not have a table for {party_size} at {requested_time}."
+            note = f" {assumptions}" if assumptions else ""
+            return f"They do not have a table for {party_size} at {requested_time}, but {result['alternative_time']} is available.{note}"
+        note = f" {assumptions}" if assumptions else ""
+        return f"They do not have a table for {party_size} at {requested_time}.{note}"
 
     if result.get("is_open"):
         return f"The restaurant is open and closes at {result.get('closes_at')}."
@@ -335,12 +353,19 @@ def _extract_time(text: str) -> str | None:
         return "12:00 AM"
 
     match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b", text)
-    if not match:
+    if match:
+        minutes = match.group(2) or "00"
+        meridiem = "AM" if match.group(3).startswith("a") else "PM"
+        return normalize_time(f"{match.group(1)}:{minutes} {meridiem}")
+
+    bare_match = re.search(r"\b(?:at|around)\s+(\d{1,2})(?::(\d{2}))?\b", text)
+    if not bare_match:
         return None
 
-    minutes = match.group(2) or "00"
-    meridiem = "AM" if match.group(3).startswith("a") else "PM"
-    return normalize_time(f"{match.group(1)}:{minutes} {meridiem}")
+    hour = int(bare_match.group(1))
+    minutes = bare_match.group(2) or "00"
+    meridiem = "PM" if 1 <= hour <= 11 else "AM"
+    return normalize_time(f"{hour}:{minutes} {meridiem}")
 
 
 def _is_unsupported(text: str) -> bool:
@@ -349,7 +374,7 @@ def _is_unsupported(text: str) -> bool:
 
 
 def _is_availability_request(text: str) -> bool:
-    return any(word in text for word in ["table", "availability", "available", "seat", "room"])
+    return any(word in text for word in ["table", "availability", "available", "avaliable", "seat", "room"])
 
 
 def _is_hours_request(text: str) -> bool:
@@ -363,15 +388,33 @@ def _clean_summary(text: str | None) -> str:
     return "I could not complete that request. Try asking about table availability or opening hours."
 
 
-def _serialize_output_items(items: list[Any]) -> list[Any]:
-    serialized = []
-    for item in items:
-        if hasattr(item, "model_dump"):
-            serialized.append(item.model_dump(exclude_none=True))
-        else:
-            serialized.append(item)
-    return serialized
-
-
 def _step(step_type: str, title: str, data: dict[str, Any]) -> Step:
     return {"step": step_type, "title": title, "data": data}
+
+
+def _has_bare_time(text: str) -> bool:
+    return bool(re.search(r"\b(?:at|around)\s+\d{1,2}(?::\d{2})?\b", text))
+
+
+def _format_assumptions(assumptions: dict[str, Any]) -> str:
+    values = [value for value in assumptions.values() if value]
+    if not values:
+        return ""
+    return " ".join(values)
+
+
+def _as_chat_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    chat_tools = []
+    for tool in tools:
+        chat_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["parameters"],
+                    "strict": tool.get("strict", False),
+                },
+            }
+        )
+    return chat_tools
